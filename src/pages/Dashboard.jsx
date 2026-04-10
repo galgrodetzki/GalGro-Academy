@@ -1,6 +1,7 @@
 import { BookOpen, Layers, Users, Calendar, TrendingUp, Sparkles } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { DRILLS, CATEGORIES } from "../data/drills";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 
 function StatCard({ icon: Icon, value, label, accent = "accent", gradient }) {
   return (
@@ -21,6 +22,7 @@ function StatCard({ icon: Icon, value, label, accent = "accent", gradient }) {
 export default function Dashboard({ setPage }) {
   const totalDrills = DRILLS.length;
   const totalCategories = CATEGORIES.length;
+  const [savedSessions] = useLocalStorage("galgro-sessions", []);
 
   return (
     <div>
@@ -66,8 +68,8 @@ export default function Dashboard({ setPage }) {
         />
         <StatCard
           icon={Calendar}
-          value="0"
-          label="Sessions planned"
+          value={savedSessions.length}
+          label="Saved sessions"
           accent="orange"
           gradient="linear-gradient(90deg, #ff6b35, transparent)"
         />
