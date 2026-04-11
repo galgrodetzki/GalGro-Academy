@@ -2,10 +2,12 @@ import { useState } from "react";
 import {
   Calendar, Clock, Trash2, Eye, Layers,
   CheckCircle2, CalendarDays, PenLine, X, Save, Users,
+  FileDown, UserCheck,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { DRILLS, CATEGORIES } from "../data/drills";
+import { exportSessionPDF } from "../utils/exportPDF";
 
 const playerById = (players, id) => players.find((p) => p.id === id);
 
@@ -71,6 +73,7 @@ export default function MySessions() {
       ...editing,
       sessionNotes: editData.sessionNotes,
       blocks: editData.blocks,
+      attendance: editData.attendance ?? editing.playerIds ?? [],
     };
     updateSession(updated);
     if (viewing?.id === editing.id) setViewing(updated);
@@ -169,18 +172,27 @@ export default function MySessions() {
               <span>{viewing.blocks.length} drills</span>
             </div>
 
-            {/* Players attending */}
+            {/* Players attending / attendance */}
             {viewing.playerIds?.length > 0 && (
               <div className="mb-4">
-                <div className="label mb-2 flex items-center gap-1.5"><Users size={11} /> Players</div>
+                <div className="label mb-2 flex items-center gap-1.5">
+                  <Users size={11} /> Players
+                  {viewing.attendance && <span className="text-white/30 normal-case font-normal">· {viewing.attendance.length}/{viewing.playerIds.length} attended</span>}
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {viewing.playerIds.map((pid) => {
                     const p = playerById(players, pid);
                     if (!p) return null;
+                    const attended = !viewing.attendance || viewing.attendance.includes(pid);
                     return (
-                      <span key={pid} className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-accent/10 border border-accent/20 text-accent text-sm font-semibold">
-                        <span className="w-5 h-5 rounded-md bg-accent/20 flex items-center justify-center text-[11px] font-black">{p.name.charAt(0)}</span>
+                      <span key={pid} className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border text-sm font-semibold ${
+                        attended
+                          ? "bg-accent/10 border-accent/20 text-accent"
+                          : "bg-bg-card2 border-bg-border text-white/30 line-through"
+                      }`}>
+                        <span className="w-5 h-5 rounded-md bg-current/10 flex items-center justify-center text-[11px] font-black">{p.name.charAt(0)}</span>
                         {p.name}
+                        {viewing.attendance && (attended ? <CheckCircle2 size={11} /> : <X size={11} />)}
                       </span>
                     );
                   })}
@@ -239,7 +251,13 @@ export default function MySessions() {
               })}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => exportSessionPDF(viewing, { players, drills: DRILLS, categories: CATEGORIES })}
+                className="btn btn-secondary flex-1"
+              >
+                <FileDown size={14} /> Export PDF
+              </button>
               {viewing.status === "completed" && (
                 <button
                   onClick={() => { setViewing(null); openRecap(viewing); }}
@@ -273,6 +291,45 @@ export default function MySessions() {
             <p className="text-sm text-white/50 mb-6">
               Update what actually happened in <span className="text-white font-semibold">{editing.name}</span>.
             </p>
+
+            {/* Attendance */}
+            {editing.playerIds?.length > 0 && (
+              <div className="mb-6">
+                <label className="label flex items-center gap-1.5"><UserCheck size={12} /> Who actually showed up?</label>
+                <div className="flex flex-wrap gap-2">
+                  {editing.playerIds.map((pid) => {
+                    const p = playerById(players, pid);
+                    if (!p) return null;
+                    const attended = editData.attendance?.includes(pid) ?? true;
+                    return (
+                      <button
+                        key={pid}
+                        onClick={() => {
+                          const current = editData.attendance ?? editing.playerIds;
+                          setEditData((d) => ({
+                            ...d,
+                            attendance: attended
+                              ? current.filter((id) => id !== pid)
+                              : [...current, pid],
+                          }));
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all ${
+                          attended
+                            ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
+                            : "border-bg-border text-white/30 line-through"
+                        }`}
+                      >
+                        <span className="w-5 h-5 rounded-md bg-current/10 flex items-center justify-center text-[11px] font-black">
+                          {p.name.charAt(0)}
+                        </span>
+                        {p.name}
+                        {attended ? <CheckCircle2 size={12} /> : <X size={12} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Overall session notes */}
             <div className="mb-6">
