@@ -1,11 +1,13 @@
 import { useState } from "react";
 import {
   Calendar, Clock, Trash2, Eye, Layers,
-  CheckCircle2, CalendarDays, PenLine, X, Save,
+  CheckCircle2, CalendarDays, PenLine, X, Save, Users,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { DRILLS, CATEGORIES } from "../data/drills";
+
+const playerById = (players, id) => players.find((p) => p.id === id);
 
 const drillById = (id) => DRILLS.find((d) => d.id === id);
 const catById = (key) => CATEGORIES.find((c) => c.key === key);
@@ -19,6 +21,7 @@ const formatDate = (iso) =>
 
 export default function MySessions() {
   const [savedSessions, setSavedSessions] = useLocalStorage("galgro-sessions", []);
+  const [players] = useLocalStorage("galgro-players", []);
   const [viewing, setViewing] = useState(null);
   const [editing, setEditing] = useState(null); // session being recapped
   const [editData, setEditData] = useState(null);
@@ -128,6 +131,7 @@ export default function MySessions() {
               key={s.id}
               session={s}
               tab={tab}
+              players={players}
               onView={() => setViewing(s)}
               onDelete={() => removeSession(s.id)}
               onMarkCompleted={() => markCompleted(s.id)}
@@ -164,6 +168,25 @@ export default function MySessions() {
               <span>·</span>
               <span>{viewing.blocks.length} drills</span>
             </div>
+
+            {/* Players attending */}
+            {viewing.playerIds?.length > 0 && (
+              <div className="mb-4">
+                <div className="label mb-2 flex items-center gap-1.5"><Users size={11} /> Players</div>
+                <div className="flex flex-wrap gap-2">
+                  {viewing.playerIds.map((pid) => {
+                    const p = playerById(players, pid);
+                    if (!p) return null;
+                    return (
+                      <span key={pid} className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-accent/10 border border-accent/20 text-accent text-sm font-semibold">
+                        <span className="w-5 h-5 rounded-md bg-accent/20 flex items-center justify-center text-[11px] font-black">{p.name.charAt(0)}</span>
+                        {p.name}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Session notes */}
             {viewing.sessionNotes && (
@@ -341,7 +364,7 @@ function TabBtn({ active, onClick, children }) {
   );
 }
 
-function SessionCard({ session: s, tab, onView, onDelete, onMarkCompleted, onRecap }) {
+function SessionCard({ session: s, tab, players = [], onView, onDelete, onMarkCompleted, onRecap }) {
   return (
     <div className="card card-hover p-4">
       <div className="min-w-0 mb-2">
@@ -372,6 +395,21 @@ function SessionCard({ session: s, tab, onView, onDelete, onMarkCompleted, onRec
           <div className="text-[11px] text-white/30">+{s.blocks.length - 3} more drills</div>
         )}
       </div>
+
+      {/* Players attending */}
+      {s.playerIds?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {s.playerIds.map((pid) => {
+            const p = playerById(players, pid);
+            if (!p) return null;
+            return (
+              <span key={pid} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-[11px] font-semibold">
+                {p.name.charAt(0)} {p.name.split(" ")[0]}
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       <div className="flex items-center gap-2 pt-3 border-t border-bg-border">
         <button onClick={onView} className="btn btn-secondary flex-1 py-1.5 text-xs">

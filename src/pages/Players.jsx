@@ -32,7 +32,7 @@ const EMPTY_PLAYER = {
 
 export default function Players() {
   const [players, setPlayers] = useLocalStorage("galgro-players", []);
-  const [savedSessions, setSavedSessions] = useLocalStorage("galgro-sessions", []);
+  const [savedSessions] = useLocalStorage("galgro-sessions", []);
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -81,20 +81,6 @@ export default function Players() {
   // Sessions linked to a player
   const playerSessions = (playerId) =>
     savedSessions.filter((s) => s.playerIds?.includes(playerId));
-
-  // Toggle player assignment on a session
-  const toggleSessionPlayer = (sessionId, playerId) => {
-    setSavedSessions(savedSessions.map((s) => {
-      if (s.id !== sessionId) return s;
-      const ids = s.playerIds || [];
-      return {
-        ...s,
-        playerIds: ids.includes(playerId)
-          ? ids.filter((id) => id !== playerId)
-          : [...ids, playerId],
-      };
-    }));
-  };
 
   return (
     <div>
@@ -365,7 +351,6 @@ export default function Players() {
               <PlayerSessionList
                 sessions={savedSessions}
                 playerId={viewing.id}
-                onToggle={(sessionId) => toggleSessionPlayer(sessionId, viewing.id)}
               />
             </div>
 
@@ -386,68 +371,42 @@ export default function Players() {
 }
 
 /* ------------------------- SESSION LIST IN PLAYER DETAIL ---------------- */
-function PlayerSessionList({ sessions, playerId, onToggle }) {
-  const [tab, setTab] = useState("assigned");
+function PlayerSessionList({ sessions, playerId }) {
+  const assigned = sessions
+    .filter((s) => s.playerIds?.includes(playerId))
+    .sort((a, b) => (a.sessionDate || "") > (b.sessionDate || "") ? -1 : 1);
 
-  const assigned = sessions.filter((s) => s.playerIds?.includes(playerId));
-  const all = sessions;
+  if (assigned.length === 0) {
+    return (
+      <div className="card p-6 text-center text-white/40 text-sm">
+        No sessions yet. Assign this player when saving a session in the Session Builder.
+      </div>
+    );
+  }
 
-  const displayed = tab === "assigned" ? assigned : all;
+  const upcoming = assigned.filter((s) => s.status === "planned" || !s.status);
+  const completed = assigned.filter((s) => s.status === "completed");
 
   return (
-    <div>
-      <div className="flex gap-1 mb-3 bg-bg-soft rounded-lg p-1 w-fit">
-        {[["assigned", `Assigned (${assigned.length})`], ["all", `All sessions (${all.length})`]].map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              tab === key ? "bg-accent text-black" : "text-white/50 hover:text-white"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {displayed.length === 0 ? (
-        <div className="card p-6 text-center text-white/40 text-sm">
-          {tab === "assigned"
-            ? "No sessions assigned yet. Switch to 'All sessions' to assign some."
-            : "No saved sessions yet. Build one in Session Builder."}
+    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+      {assigned.map((s) => (
+        <div key={s.id} className="card p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${s.status === "completed" ? "bg-emerald-400" : "bg-accent"}`} />
+            <div className="font-semibold text-sm truncate flex-1">{s.name}</div>
+            <span className={`text-[10px] font-bold uppercase tracking-wide ${s.status === "completed" ? "text-emerald-400" : "text-accent"}`}>
+              {s.status === "completed" ? "Done" : "Upcoming"}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-[11px] text-white/40 pl-4">
+            <span className="flex items-center gap-1"><Calendar size={10} /> {formatDate(s.sessionDate)}</span>
+            <span>·</span>
+            <span>{s.totalDuration} min</span>
+            <span>·</span>
+            <span>{s.blocks.length} drills</span>
+          </div>
         </div>
-      ) : (
-        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-          {displayed.map((s) => {
-            const isAssigned = s.playerIds?.includes(playerId);
-            return (
-              <div key={s.id} className="card p-3 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm truncate">{s.name}</div>
-                  <div className="flex items-center gap-2 text-[11px] text-white/40 mt-0.5">
-                    <span className={`flex items-center gap-1 ${s.status === "completed" ? "text-emerald-400" : "text-accent"}`}>
-                      {s.status === "completed" ? <CheckCircle2 size={10} /> : <CalendarDays size={10} />}
-                      {formatDate(s.sessionDate)}
-                    </span>
-                    <span>· {s.totalDuration} min</span>
-                    <span>· {s.blocks.length} drills</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => onToggle(s.id)}
-                  className={`btn py-1.5 px-3 text-xs shrink-0 transition-all ${
-                    isAssigned
-                      ? "bg-accent/10 text-accent border border-accent/30 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30"
-                      : "btn-secondary hover:border-accent/40 hover:text-accent"
-                  }`}
-                >
-                  {isAssigned ? "Remove" : "Assign"}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      ))}
     </div>
   );
 }

@@ -173,11 +173,21 @@ export default function SessionBuilder() {
   };
 
   // Save session
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState([]);
+  const [players] = useLocalStorage("galgro-players", []);
+
   const openSaveModal = () => {
     if (session.blocks.length === 0) { showToast("Add at least one drill before saving"); return; }
     setSaveDate(todayISO());
     setSaveStatus("planned");
+    setSelectedPlayerIds([]);
     setShowSaveModal(true);
+  };
+
+  const togglePlayer = (id) => {
+    setSelectedPlayerIds((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
+    );
   };
 
   const confirmSave = () => {
@@ -191,6 +201,7 @@ export default function SessionBuilder() {
       blocks: session.blocks,
       totalDuration,
       sessionNotes: "",
+      playerIds: selectedPlayerIds,
     };
     setSavedSessions([saved, ...savedSessions]);
     setShowSaveModal(false);
@@ -488,7 +499,38 @@ export default function SessionBuilder() {
                 </button>
               </div>
             </div>
-            <div className="text-xs text-white/40">{session.blocks.length} drills · {totalDuration} min total</div>
+            {/* Player picker */}
+            {players.length > 0 && (
+              <div>
+                <label className="label">Who's attending?</label>
+                <div className="flex flex-wrap gap-2">
+                  {players.map((p) => {
+                    const selected = selectedPlayerIds.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => togglePlayer(p.id)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all ${
+                          selected
+                            ? "border-accent bg-accent/10 text-accent"
+                            : "border-bg-border text-white/50 hover:border-white/30 hover:text-white"
+                        }`}
+                      >
+                        <span className="w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-black bg-white/10">
+                          {p.name.charAt(0)}
+                        </span>
+                        {p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="text-xs text-white/40">
+              {session.blocks.length} drills · {totalDuration} min total
+              {selectedPlayerIds.length > 0 ? ` · ${selectedPlayerIds.length} player${selectedPlayerIds.length > 1 ? "s" : ""}` : ""}
+            </div>
           </div>
           <div className="flex gap-2 mt-6">
             <button onClick={() => setShowSaveModal(false)} className="btn btn-secondary flex-1">Cancel</button>
