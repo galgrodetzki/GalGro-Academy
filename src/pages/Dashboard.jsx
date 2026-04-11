@@ -23,6 +23,7 @@ export default function Dashboard({ setPage }) {
   const totalDrills = DRILLS.length;
   const totalCategories = CATEGORIES.length;
   const [savedSessions] = useLocalStorage("galgro-sessions", []);
+  const [players] = useLocalStorage("galgro-players", []);
 
   return (
     <div>
@@ -75,7 +76,7 @@ export default function Dashboard({ setPage }) {
         />
         <StatCard
           icon={Users}
-          value="0"
+          value={players.length}
           label="Active players"
           accent="electric-purple"
           gradient="linear-gradient(90deg, #a855f7, transparent)"
