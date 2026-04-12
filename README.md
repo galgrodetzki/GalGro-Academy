@@ -1,16 +1,117 @@
-# React + Vite
+# GalGro's Academy
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Goalkeeper coaching portal for building sessions, tracking players, reviewing training history, exporting PDFs, and approving AI-proposed custom drills.
 
-Currently, two official plugins are available:
+Live site: https://gal-gro-academy.vercel.app
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack
 
-## React Compiler
+- React 19 + Vite 8
+- Tailwind CSS v3 with a custom dark navy theme
+- Framer Motion for page, modal, and interaction polish
+- @dnd-kit for drag-and-drop session building
+- Supabase for auth, data, invites, profiles, RLS-backed access, and custom drills
+- jsPDF for session PDF exports
+- Vercel production deploys from `main`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Local Development
 
-## Expanding the ESLint configuration
+```bash
+npm install
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Useful checks:
+
+```bash
+npm run lint
+npm run build
+```
+
+## Source Map
+
+```text
+src/
+  lib/supabase.js
+  context/
+    AuthContext.jsx
+    DataContext.jsx
+  hooks/
+    useSession.js
+    useScrollLock.js
+    useLocalStorage.js
+  pages/
+    Login.jsx
+    Dashboard.jsx
+    DrillLibrary.jsx
+    SessionBuilder.jsx
+    MySessions.jsx
+    Players.jsx
+    Admin.jsx
+  components/
+    Sidebar.jsx
+    BottomNav.jsx
+    MobileHeader.jsx
+    SettingsModal.jsx
+    PageHeader.jsx
+    CategoryIcon.jsx
+  data/
+    drills.js
+  utils/
+    drillUtils.js
+    exportPDF.js
+```
+
+## App Model
+
+The app is a single-page React app without React Router. Page navigation is controlled by a `page` state string in `App.jsx`.
+
+```jsx
+<AuthProvider>
+  <DataProvider>
+    <AppInner />
+  </DataProvider>
+</AuthProvider>
+```
+
+`AuthContext` owns the signed-in user, profile, sign-out, and role helpers such as `isCoach` and `canEdit`.
+
+`DataContext` owns CRUD for sessions, players, templates, settings, agent proposals, and custom drills. Supabase uses snake_case columns; React uses camelCase objects, with mappers in `DataContext.jsx`.
+
+## Design System
+
+Shared classes live in `src/index.css`:
+
+- `card`
+- `btn`, `btn-primary`, `btn-secondary`, `btn-ghost`
+- `input`
+- `label`
+- `tag`
+
+Tailwind theme tokens live in `tailwind.config.js`, centered on a dark navy interface with green primary actions and blue secondary accents.
+
+## Mobile Layout
+
+- Desktop uses the fixed left `Sidebar`.
+- Mobile uses `MobileHeader` and fixed `BottomNav`.
+- Modal surfaces use the bottom-sheet pattern on mobile and centered modals on desktop.
+- Every modal should use `useScrollLock(open)`.
+
+## Custom Drills
+
+Static drills live in `src/data/drills.js`. Approved agent proposals are inserted into Supabase `custom_drills`, loaded through `DataContext`, and merged with the static drill list where drills are displayed or used:
+
+```js
+const allDrills = [...DRILLS, ...customDrills];
+```
+
+Saved-session views and PDF export should always resolve drills from the merged list.
+
+## Product Roadmap
+
+- Motion polish: continue tuning micro-interactions after real-device testing.
+- PWA support: installable app shell, manifest, icons, and offline static shell cache.
+- Logo and branding: replace the temporary `GG` mark in Login, Sidebar, MobileHeader, and PDF export.
+- Keeper-facing features: personal keeper dashboard, attended-session history, attendance rate, and keeper notes.
+- Performance: split page-level chunks so the main app bundle stays lean.
+- Access hardening: keep UI role gates aligned with Supabase RLS policies.

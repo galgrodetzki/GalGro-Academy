@@ -1,21 +1,35 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { DataProvider, useData } from "./context/DataContext";
 import Sidebar from "./components/Sidebar";
 import BottomNav from "./components/BottomNav";
 import MobileHeader from "./components/MobileHeader";
 import SettingsModal from "./components/SettingsModal";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import DrillLibrary from "./pages/DrillLibrary";
-import SessionBuilder from "./pages/SessionBuilder";
-import MySessions from "./pages/MySessions";
-import Players from "./pages/Players";
-import Admin from "./pages/Admin";
+import { pageMotion } from "./utils/motion";
+
+const Login = lazy(() => import("./pages/Login"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const DrillLibrary = lazy(() => import("./pages/DrillLibrary"));
+const SessionBuilder = lazy(() => import("./pages/SessionBuilder"));
+const MySessions = lazy(() => import("./pages/MySessions"));
+const Players = lazy(() => import("./pages/Players"));
+const Admin = lazy(() => import("./pages/Admin"));
+
+function LoadingState({ label = "Loading academy..." }) {
+  return (
+    <div className="min-h-[45vh] flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        <p className="text-white/40 text-sm">{label}</p>
+      </div>
+    </div>
+  );
+}
 
 // ── Inner app (needs auth + data context) ────────────────────────────────────
 function AppInner() {
-  const { user, profile, loading, isCoach } = useAuth();
+  const { user, loading, isCoach, canEdit } = useAuth();
   const { hasLocalData, migrateFromLocalStorage, sessions, players } = useData();
   const [page, setPage] = useState("dashboard");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -25,16 +39,26 @@ function AppInner() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-        <p className="text-white/40 text-sm">Loading academy…</p>
-      </div>
+      <LoadingState />
     </div>
   );
 
-  if (!user) return <Login />;
+  if (!user) return (
+    <Suspense fallback={<LoadingState label="Loading sign in..." />}>
+      <Login />
+    </Suspense>
+  );
 
-  const goTo = (p) => { setPage(p); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const canAccessPage = (p) => {
+    if (p === "admin") return isCoach;
+    if (p === "builder" || p === "players") return canEdit;
+    return true;
+  };
+  const activePage = canAccessPage(page) ? page : "dashboard";
+  const goTo = (p) => {
+    setPage(canAccessPage(p) ? p : "dashboard");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const doMigrate = async () => {
     setMigrating(true);
@@ -51,9 +75,9 @@ function AppInner() {
 
   return (
     <div className="min-h-screen">
-      <Sidebar page={page} setPage={goTo} onOpenSettings={() => setSettingsOpen(true)} />
+      <Sidebar page={activePage} setPage={goTo} onOpenSettings={() => setSettingsOpen(true)} />
       <MobileHeader onOpenSettings={() => setSettingsOpen(true)} />
-      <BottomNav page={page} setPage={goTo} />
+      <BottomNav page={activePage} setPage={goTo} />
 
       <main className="md:ml-60 max-w-[1600px] px-4 pt-16 pb-24 md:px-8 md:pt-8 md:pb-8">
 
@@ -77,12 +101,18 @@ function AppInner() {
           </div>
         )}
 
-        {page === "dashboard" && <Dashboard setPage={goTo} />}
-        {page === "library"   && <DrillLibrary />}
-        {page === "builder"   && <SessionBuilder />}
-        {page === "sessions"  && <MySessions />}
-        {page === "players"   && <Players />}
-        {page === "admin"     && isCoach && <Admin />}
+        <AnimatePresence mode="wait" initial={false}>
+          <Motion.div key={activePage} {...pageMotion}>
+            <Suspense fallback={<LoadingState label="Loading page..." />}>
+              {activePage === "dashboard" && <Dashboard setPage={goTo} />}
+              {activePage === "library"   && <DrillLibrary />}
+              {activePage === "builder"   && <SessionBuilder />}
+              {activePage === "sessions"  && <MySessions />}
+              {activePage === "players"   && <Players />}
+              {activePage === "admin"     && isCoach && <Admin />}
+            </Suspense>
+          </Motion.div>
+        </AnimatePresence>
       </main>
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />

@@ -28,9 +28,14 @@ export default function Login() {
     if (!name.trim()) { setError("Please enter your name."); setLoading(false); return; }
 
     // Check if this is the very first account (no profiles exist yet)
-    const { count } = await supabase
+    const { count, error: countErr } = await supabase
       .from("profiles")
       .select("id", { count: "exact", head: true });
+    if (countErr) {
+      setError("Could not check account access. Try again in a moment.");
+      setLoading(false);
+      return;
+    }
 
     const isFirstUser = count === 0;
 
@@ -70,7 +75,12 @@ export default function Login() {
 
     // Mark invite as used (if applicable)
     if (inviteId && data.user) {
-      await supabase.from("invites").update({ used: true, used_by: data.user.id }).eq("id", inviteId);
+      const { error: usedErr } = await supabase.from("invites").update({ used: true, used_by: data.user.id }).eq("id", inviteId);
+      if (usedErr) {
+        setError("Account created, but the invite could not be marked as used. Ask your coach before sharing that code again.");
+        setLoading(false);
+        return;
+      }
     }
 
     setInfo(isFirstUser

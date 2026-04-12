@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useScrollLock } from "../hooks/useScrollLock";
 import {
   Calendar, Clock, Trash2, Eye, Layers,
@@ -6,8 +7,11 @@ import {
   FileDown, UserCheck,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
+import CategoryIcon from "../components/CategoryIcon";
 import { useData } from "../context/DataContext";
+import { useAuth } from "../context/AuthContext";
 import { DRILLS, CATEGORIES } from "../data/drills";
+import { modalBackdropMotion, modalPanelMotion } from "../utils/motion";
 
 const playerById = (players, id) => players.find((p) => p.id === id);
 
@@ -23,11 +27,15 @@ const formatDate = (iso) =>
 
 export default function MySessions() {
   const { sessions: savedSessions, players, customDrills, updateSession: dbUpdate, removeSession: dbRemove } = useData();
+  const { canEdit } = useAuth();
   const [viewingId, setViewingId] = useState(null);
   const [editing, setEditing] = useState(null);
   const [editData, setEditData] = useState(null);
   const [tab, setTab] = useState("upcoming");
+  const [toast, setToast] = useState("");
   const allDrills = useMemo(() => [...DRILLS, ...customDrills], [customDrills]);
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
   // Always derive from live data
   const viewing = viewingId ? savedSessions.find((s) => s.id === viewingId) ?? null : null;
@@ -44,18 +52,26 @@ export default function MySessions() {
   useScrollLock(!!(viewing || editing));
 
   const updateSession = async (updated) => {
-    await dbUpdate(updated);
+    return dbUpdate(updated);
   };
 
   const removeSession = async (id) => {
+    if (!canEdit) { showToast("Only coaches can delete sessions."); return; }
     if (!confirm("Delete this session?")) return;
-    await dbRemove(id);
+    const error = await dbRemove(id);
+    if (error) {
+      showToast(`Could not delete session: ${error.message}`);
+      return;
+    }
     if (viewingId === id) setViewingId(null);
   };
 
   const markCompleted = async (id) => {
+    if (!canEdit) { showToast("Only coaches can update sessions."); return; }
     const s = savedSessions.find((x) => x.id === id);
-    if (s) await dbUpdate({ ...s, status: "completed" });
+    if (!s) return;
+    const error = await dbUpdate({ ...s, status: "completed" });
+    if (error) showToast(`Could not update session: ${error.message}`);
   };
 
   const exportPDF = async (session, options = {}) => {
@@ -78,12 +94,17 @@ export default function MySessions() {
   };
 
   const saveRecap = async () => {
-    await updateSession({
+    if (!canEdit) { showToast("Only coaches can save recaps."); return; }
+    const error = await updateSession({
       ...editing,
       sessionNotes: editData.sessionNotes,
       blocks: editData.blocks,
       attendance: editData.attendance,
     });
+    if (error) {
+      showToast(`Could not save recap: ${error.message}`);
+      return;
+    }
     setEditing(null);
     setEditData(null);
   };
@@ -130,7 +151,9 @@ export default function MySessions() {
           </h3>
           <p className="text-sm text-white/50">
             {tab === "upcoming"
-              ? "Go to Session Builder, build a session, and save it as Upcoming."
+              ? canEdit
+                ? "Go to Session Builder, build a session, and save it as Upcoming."
+                : "Upcoming sessions assigned to you will show up here."
               : "Sessions marked as Completed show up here."}
           </p>
         </div>
@@ -143,6 +166,7 @@ export default function MySessions() {
               tab={tab}
               players={players}
               drills={allDrills}
+              canEdit={canEdit}
               onView={() => setViewingId(s.id)}
               onDelete={() => removeSession(s.id)}
               onMarkCompleted={() => markCompleted(s.id)}
@@ -153,14 +177,17 @@ export default function MySessions() {
       )}
 
       {/* Detail view modal */}
-      {viewing && !editing && (
-        <div
+      <AnimatePresence>
+        {viewing && !editing && (
+        <Motion.div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setViewingId(null)}
+          {...modalBackdropMotion}
         >
-          <div
+          <Motion.div
             className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
+            {...modalPanelMotion}
           >
             <div className="flex items-center gap-2 mb-1">
               {viewing.status === "completed"
@@ -227,7 +254,7 @@ export default function MySessions() {
                   <div key={b.blockId} className="card p-3 bg-bg-soft">
                     <div className="flex items-center gap-2 text-[11px] text-white/50">
                       <span className="bg-accent/20 text-accent rounded w-5 h-5 flex items-center justify-center font-bold shrink-0">{i + 1}</span>
-                      <span>{info?.icon}</span>
+                      <CategoryIcon category={d.cat} size={11} />
                       <span>{info?.label}</span>
                     </div>
                     <div className="font-semibold text-sm mt-1">{d.name}</div>
@@ -274,7 +301,7 @@ export default function MySessions() {
               >
                 <FileDown size={14} /> Print PDF
               </button>
-              {viewing.status === "completed" && (
+              {canEdit && viewing.status === "completed" && (
                 <button
                   onClick={() => { setViewingId(null); openRecap(viewing); }}
                   className="btn btn-secondary flex-1"
@@ -284,19 +311,23 @@ export default function MySessions() {
               )}
               <button onClick={() => setViewingId(null)} className="btn btn-secondary flex-1">Close</button>
             </div>
-          </div>
-        </div>
-      )}
+          </Motion.div>
+        </Motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Recap editor modal */}
-      {editing && editData && (
-        <div
+      <AnimatePresence>
+        {editing && editData && (
+        <Motion.div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setEditing(null)}
+          {...modalBackdropMotion}
         >
-          <div
+          <Motion.div
             className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[90vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
+            {...modalPanelMotion}
           >
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-display text-xl font-bold">Edit Recap</h2>
@@ -363,13 +394,12 @@ export default function MySessions() {
             <div className="space-y-3 mb-6">
               {editData.blocks.map((b, i) => {
                 const d = drillById(allDrills, b.drillId);
-                const info = catById(d?.cat);
                 if (!d) return null;
                 return (
                   <div key={b.blockId} className="card p-4 bg-bg-soft">
                     <div className="flex items-center gap-2 text-[11px] text-white/50 mb-1">
                       <span className="bg-accent/20 text-accent rounded w-5 h-5 flex items-center justify-center font-bold shrink-0">{i + 1}</span>
-                      <span>{info?.icon}</span>
+                      <CategoryIcon category={d.cat} size={11} />
                       <span className="font-semibold text-white/80">{d.name}</span>
                     </div>
 
@@ -419,7 +449,13 @@ export default function MySessions() {
                 <Save size={14} /> Save recap
               </button>
             </div>
-          </div>
+          </Motion.div>
+        </Motion.div>
+        )}
+      </AnimatePresence>
+      {toast && (
+        <div className="fixed left-4 right-4 md:left-auto md:right-6 bottom-20 md:bottom-6 z-[45] card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold text-center md:text-left">
+          {toast}
         </div>
       )}
     </div>
@@ -437,7 +473,7 @@ function TabBtn({ active, onClick, children }) {
   );
 }
 
-function SessionCard({ session: s, tab, players = [], drills = [], onView, onDelete, onMarkCompleted, onRecap }) {
+function SessionCard({ session: s, tab, players = [], drills = [], canEdit, onView, onDelete, onMarkCompleted, onRecap }) {
   return (
     <div className="card card-hover p-4">
       <div className="min-w-0 mb-2">
@@ -488,7 +524,7 @@ function SessionCard({ session: s, tab, players = [], drills = [], onView, onDel
         <button onClick={onView} className="btn btn-secondary flex-1 py-1.5 text-xs">
           <Eye size={12} /> View
         </button>
-        {tab === "upcoming" && (
+        {canEdit && tab === "upcoming" && (
           <button
             onClick={onMarkCompleted}
             className="btn py-1.5 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
@@ -497,7 +533,7 @@ function SessionCard({ session: s, tab, players = [], drills = [], onView, onDel
             <CheckCircle2 size={12} />
           </button>
         )}
-        {tab === "past" && (
+        {canEdit && tab === "past" && (
           <button
             onClick={onRecap}
             className="btn py-1.5 px-2 text-xs bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
@@ -506,13 +542,15 @@ function SessionCard({ session: s, tab, players = [], drills = [], onView, onDel
             <PenLine size={12} />
           </button>
         )}
-        <button
-          onClick={onDelete}
-          className="btn btn-ghost px-2 py-1.5 text-xs hover:text-red-400"
-          title="Delete"
-        >
-          <Trash2 size={12} />
-        </button>
+        {canEdit && (
+          <button
+            onClick={onDelete}
+            className="btn btn-ghost px-2 py-1.5 text-xs hover:text-red-400"
+            title="Delete"
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
       </div>
     </div>
   );

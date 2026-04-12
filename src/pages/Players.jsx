@@ -1,16 +1,14 @@
 import { useState } from "react";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useScrollLock } from "../hooks/useScrollLock";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import {
   Users, Plus, X, Save, PenLine, Trash2, Eye,
-  Calendar, Clock, ChevronRight, ShieldHalf, Cake,
-  Ruler, Weight, StickyNote, CheckCircle2, CalendarDays,
+  Calendar, Cake, Ruler, Weight, StickyNote,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
-import { DRILLS } from "../data/drills";
-
-const drillById = (id) => DRILLS.find((d) => d.id === id);
+import { modalBackdropMotion, modalPanelMotion } from "../utils/motion";
 
 const formatDate = (iso) =>
   iso
@@ -46,19 +44,32 @@ export default function Players() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
-  const openAdd = () => { setForm(EMPTY_PLAYER); setEditingId(null); setShowForm(true); };
+  const openAdd = () => {
+    if (!canEdit) { showToast("Only coaches can add players."); return; }
+    setForm(EMPTY_PLAYER);
+    setEditingId(null);
+    setShowForm(true);
+  };
 
-  const openEdit = (player) => { setForm({ ...player }); setEditingId(player.id); setShowForm(true); };
+  const openEdit = (player) => {
+    if (!canEdit) { showToast("Only coaches can edit players."); return; }
+    setForm({ ...player });
+    setEditingId(player.id);
+    setShowForm(true);
+  };
 
   const savePlayer = async () => {
+    if (!canEdit) { showToast("Only coaches can save player changes."); return; }
     if (!form.name.trim()) { showToast("Player name is required"); return; }
     if (editingId) {
-      await updatePlayer({ ...form, id: editingId });
+      const error = await updatePlayer({ ...form, id: editingId });
+      if (error) { showToast(`Could not update player: ${error.message}`); return; }
       if (viewing?.id === editingId) setViewing({ ...viewing, ...form });
       showToast(`${form.name} updated`);
     } else {
       const newPlayer = { ...form, id: "p_" + Date.now(), joinedAt: new Date().toISOString() };
-      await addPlayer(newPlayer);
+      const error = await addPlayer(newPlayer);
+      if (error) { showToast(`Could not add player: ${error.message}`); return; }
       showToast(`${form.name} added to roster`);
     }
     setShowForm(false);
@@ -66,8 +77,10 @@ export default function Players() {
   };
 
   const deletePlayer = async (id, name) => {
+    if (!canEdit) { showToast("Only coaches can remove players."); return; }
     if (!confirm(`Remove ${name} from the roster?`)) return;
-    await removePlayer(id);
+    const error = await removePlayer(id);
+    if (error) { showToast(`Could not remove player: ${error.message}`); return; }
     if (viewing?.id === id) setViewing(null);
   };
 
@@ -81,9 +94,11 @@ export default function Players() {
         title="Players"
         subtitle={`${players.length} goalkeeper${players.length !== 1 ? "s" : ""} in your roster`}
       >
-        <button onClick={openAdd} className="btn btn-primary">
-          <Plus size={14} /> Add player
-        </button>
+        {canEdit && (
+          <button onClick={openAdd} className="btn btn-primary">
+            <Plus size={14} /> Add player
+          </button>
+        )}
       </PageHeader>
 
       {players.length === 0 ? (
@@ -91,9 +106,11 @@ export default function Players() {
           <Users className="mx-auto text-white/20 mb-4" size={48} />
           <h3 className="font-display text-lg font-bold mb-1">No players yet</h3>
           <p className="text-sm text-white/50 mb-4">Add your goalkeepers to start tracking their sessions.</p>
-          <button onClick={openAdd} className="btn btn-primary mx-auto">
-            <Plus size={14} /> Add your first player
-          </button>
+          {canEdit && (
+            <button onClick={openAdd} className="btn btn-primary mx-auto">
+              <Plus size={14} /> Add your first player
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -122,9 +139,10 @@ export default function Players() {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="grid grid-cols-4 gap-2 mb-3">
                   <StatPill label="Age" value={p.age || "—"} />
                   <StatPill label="Sessions" value={sessions.length} />
+                  <StatPill label="Next" value={upcoming} />
                   <StatPill label="Done" value={completed} accent />
                 </div>
 
@@ -137,20 +155,24 @@ export default function Players() {
                   <button onClick={() => setViewing(p)} className="btn btn-secondary flex-1 py-1.5 text-xs">
                     <Eye size={12} /> View
                   </button>
-                  <button
-                    onClick={() => openEdit(p)}
-                    className="btn btn-ghost px-2 py-1.5 text-xs hover:text-accent"
-                    title="Edit"
-                  >
-                    <PenLine size={12} />
-                  </button>
-                  <button
-                    onClick={() => deletePlayer(p.id, p.name)}
-                    className="btn btn-ghost px-2 py-1.5 text-xs hover:text-red-400"
-                    title="Remove"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                  {canEdit && (
+                    <>
+                      <button
+                        onClick={() => openEdit(p)}
+                        className="btn btn-ghost px-2 py-1.5 text-xs hover:text-accent"
+                        title="Edit"
+                      >
+                        <PenLine size={12} />
+                      </button>
+                      <button
+                        onClick={() => deletePlayer(p.id, p.name)}
+                        className="btn btn-ghost px-2 py-1.5 text-xs hover:text-red-400"
+                        title="Remove"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -159,14 +181,17 @@ export default function Players() {
       )}
 
       {/* Add / Edit player modal */}
-      {showForm && (
-        <div
+      <AnimatePresence>
+        {showForm && (
+        <Motion.div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end sm:items-center justify-center sm:p-4"
           onClick={() => setShowForm(false)}
+          {...modalBackdropMotion}
         >
-          <div
+          <Motion.div
             className="card w-full sm:max-w-lg p-5 sm:p-6 max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-xl pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-6"
             onClick={(e) => e.stopPropagation()}
+            {...modalPanelMotion}
           >
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-display text-xl font-bold">
@@ -265,19 +290,23 @@ export default function Players() {
                 <Save size={14} /> {editingId ? "Save changes" : "Add player"}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </Motion.div>
+        </Motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Player detail modal */}
-      {viewing && !showForm && (
-        <div
+      <AnimatePresence>
+        {viewing && !showForm && (
+        <Motion.div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setViewing(null)}
+          {...modalBackdropMotion}
         >
-          <div
+          <Motion.div
             className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[90vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
+            {...modalPanelMotion}
           >
             {/* Player header */}
             <div className="flex items-start gap-4 mb-6 pb-6 border-b border-bg-border">
@@ -298,9 +327,11 @@ export default function Players() {
                   )}
                 </div>
               </div>
-              <button onClick={() => { setViewing(null); openEdit(viewing); }} className="btn btn-secondary py-1.5 px-3 text-xs">
-                <PenLine size={12} /> Edit
-              </button>
+              {canEdit && (
+                <button onClick={() => { setViewing(null); openEdit(viewing); }} className="btn btn-secondary py-1.5 px-3 text-xs">
+                  <PenLine size={12} /> Edit
+                </button>
+              )}
             </div>
 
             {/* Physical stats */}
@@ -350,9 +381,10 @@ export default function Players() {
             <button onClick={() => setViewing(null)} className="btn btn-secondary w-full mt-4">
               Close
             </button>
-          </div>
-        </div>
-      )}
+          </Motion.div>
+        </Motion.div>
+        )}
+      </AnimatePresence>
 
       {toast && (
         <div className="fixed left-4 right-4 md:left-auto md:right-6 bottom-20 md:bottom-6 z-[45] card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold text-center md:text-left">
@@ -382,6 +414,10 @@ function PlayerSessionList({ sessions, playerId }) {
 
   return (
     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+      <div className="grid grid-cols-2 gap-2">
+        <StatPill label="Upcoming" value={upcoming.length} />
+        <StatPill label="Completed" value={completed.length} accent />
+      </div>
       {assigned.map((s) => (
         <div key={s.id} className="card p-3">
           <div className="flex items-center gap-2 mb-1">

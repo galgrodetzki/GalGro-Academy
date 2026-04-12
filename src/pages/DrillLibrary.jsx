@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import { Search, Clock, Zap, Package, ChevronRight, Sparkles } from "lucide-react";
 import PageHeader from "../components/PageHeader";
+import CategoryIcon from "../components/CategoryIcon";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useScrollLock } from "../hooks/useScrollLock";
 import { useData } from "../context/DataContext";
+import { drillCardHover, modalBackdropMotion, modalPanelMotion } from "../utils/motion";
 
 const INT_COLORS = {
   Low: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -97,7 +100,7 @@ export default function DrillLibrary() {
                     : "bg-bg-card2 text-white/60 hover:text-white border border-bg-border"
                 }`}
               >
-                <span>{c.icon}</span>
+                <CategoryIcon category={c.key} size={12} />
                 <span>{c.label}</span>
                 <span className={`text-[10px] ${active ? "text-black/60" : "text-white/30"}`}>
                   {count}
@@ -113,14 +116,15 @@ export default function DrillLibrary() {
         {filtered.map((d) => {
           const info = catInfo(d.cat);
           return (
-            <button
+            <Motion.button
               key={d.id}
+              whileHover={drillCardHover}
               onClick={() => setSelected(d)}
               className="card card-hover p-4 text-left group"
             >
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-white/50">
-                  <span>{info?.icon}</span>
+                  <CategoryIcon category={d.cat} size={12} />
                   <span>{info?.label}</span>
                   {d.custom && (
                     <span className="flex items-center gap-0.5 text-accent/80 normal-case tracking-normal">
@@ -147,7 +151,7 @@ export default function DrillLibrary() {
                 </div>
                 <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 group-hover:text-accent transition-all" />
               </div>
-            </button>
+            </Motion.button>
           );
         })}
       </div>
@@ -159,17 +163,20 @@ export default function DrillLibrary() {
       )}
 
       {/* Drill detail modal */}
-      {selected && (
-        <div
+      <AnimatePresence>
+        {selected && (
+        <Motion.div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setSelected(null)}
+          {...modalBackdropMotion}
         >
-          <div
+          <Motion.div
             className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
+            {...modalPanelMotion}
           >
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-white/50 mb-2">
-              <span>{catInfo(selected.cat)?.icon}</span>
+              <CategoryIcon category={selected.cat} size={13} />
               <span>{catInfo(selected.cat)?.label}</span>
             </div>
             <div className="flex items-start justify-between gap-4 mb-4">
@@ -206,9 +213,10 @@ export default function DrillLibrary() {
             >
               Close
             </button>
-          </div>
-        </div>
-      )}
+          </Motion.div>
+        </Motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

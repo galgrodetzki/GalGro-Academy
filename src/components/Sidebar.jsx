@@ -14,7 +14,7 @@ const NAV = [
 
 export default function Sidebar({ page, setPage, onOpenSettings }) {
   const [currentSession] = useLocalStorage("galgro-current-session", EMPTY_SESSION);
-  const { profile, signOut, isCoach } = useAuth();
+  const { profile, signOut, isCoach, canEdit } = useAuth();
   const { pendingProposalCount } = useData();
 
   const hasSessionInProgress = (currentSession?.blocks?.length ?? 0) > 0;
@@ -27,6 +27,7 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
     keeper:     "Goalkeeper",
     viewer:     "Viewer",
   }[profile?.role] ?? "Member";
+  const navItems = canEdit ? NAV : NAV.filter(({ key }) => key !== "builder" && key !== "players");
 
   return (
     <aside className="hidden md:flex fixed left-0 top-0 h-screen w-60 bg-bg-soft border-r border-bg-border flex-col p-4 z-40">
@@ -47,7 +48,7 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1 flex-1">
-        {NAV.map(({ key, label, icon: Icon }) => {
+        {navItems.map(({ key, label, icon: Icon }) => {
           const active  = page === key;
           const showDot = key === "builder" && hasSessionInProgress && !active;
           return (

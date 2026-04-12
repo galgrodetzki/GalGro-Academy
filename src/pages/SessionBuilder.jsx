@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useScrollLock } from "../hooks/useScrollLock";
 import {
   DndContext,
@@ -36,10 +37,12 @@ import {
   FolderOpen,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
+import CategoryIcon from "../components/CategoryIcon";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useSession } from "../hooks/useSession";
 import { useData } from "../context/DataContext";
 import { catById, INT_COLORS } from "../utils/drillUtils";
+import { drillCardHover, modalBackdropMotion, modalPanelMotion } from "../utils/motion";
 
 const todayISO = () => new Date().toISOString().split("T")[0];
 
@@ -153,7 +156,11 @@ export default function SessionBuilder() {
         return rest;
       }),
     };
-    await addTemplate(tmpl);
+    const error = await addTemplate(tmpl);
+    if (error) {
+      showToast(`Could not save template: ${error.message}`);
+      return;
+    }
     setShowSaveTemplate(false);
     setTemplateName("");
     showToast(`Template "${tmpl.name}" saved`);
@@ -167,7 +174,8 @@ export default function SessionBuilder() {
   };
 
   const deleteTemplate = async (id) => {
-    await removeTemplate(id);
+    const error = await removeTemplate(id);
+    if (error) showToast(`Could not delete template: ${error.message}`);
   };
 
   // Save session
@@ -200,7 +208,11 @@ export default function SessionBuilder() {
       playerIds: selectedPlayerIds,
       attendance: [],
     };
-    await addSession(saved);
+    const error = await addSession(saved);
+    if (error) {
+      showToast(`Could not save session: ${error.message}`);
+      return;
+    }
     clearSession();
     setShowSaveModal(false);
     showToast(`Session saved for ${formatDate(saveDate)}`);
@@ -303,7 +315,7 @@ export default function SessionBuilder() {
                 const count = allDrills.filter((d) => d.cat === c.key).length;
                 return (
                   <Chip key={c.key} active={cat === c.key} onClick={() => setCat(c.key)}>
-                    <span className="mr-1">{c.icon}</span>{c.label}
+                    <CategoryIcon category={c.key} size={11} className="mr-1" />{c.label}
                     <span className="ml-1 opacity-50">{count}</span>
                   </Chip>
                 );
@@ -404,172 +416,181 @@ export default function SessionBuilder() {
       </DndContext>
 
       {/* Drill preview modal */}
-      {previewDrill && (
-        <DrillPreviewModal
-          drill={previewDrill}
-          onClose={() => setPreviewDrill(null)}
-          onAdd={() => { addDrill(previewDrill); setPreviewDrill(null); }}
-        />
-      )}
+      <AnimatePresence>
+        {previewDrill && (
+          <DrillPreviewModal
+            key="drill-preview"
+            drill={previewDrill}
+            onClose={() => setPreviewDrill(null)}
+            onAdd={() => { addDrill(previewDrill); setPreviewDrill(null); }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Save as template modal */}
-      {showSaveTemplate && (
-        <Modal title="Save as Template" onClose={() => setShowSaveTemplate(false)}>
-          <div className="space-y-4">
-            <div>
-              <label className="label">Template name</label>
-              <input
-                type="text"
-                value={templateName}
-                onChange={(e) => setTemplateName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && confirmSaveTemplate()}
-                placeholder="e.g. Rapid Fire Warmup"
-                className="input"
-                autoFocus
-              />
-            </div>
-            <div className="text-xs text-white/40">
-              {session.blocks.length} drills · {totalDuration} min total
-            </div>
-          </div>
-          <div className="flex gap-2 mt-6">
-            <button onClick={() => setShowSaveTemplate(false)} className="btn btn-secondary flex-1">Cancel</button>
-            <button onClick={confirmSaveTemplate} className="btn btn-primary flex-1">
-              <Bookmark size={14} /> Save template
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {/* Load template modal */}
-      {showLoadTemplate && (
-        <Modal title="Load Template" onClose={() => setShowLoadTemplate(false)}>
-          {templates.length === 0 ? (
-            <div className="text-center py-8 text-white/40">
-              <BookTemplate className="mx-auto mb-3 opacity-30" size={36} />
-              <p className="text-sm">No templates saved yet.</p>
-              <p className="text-xs mt-1">Build a session and click "Save template".</p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {templates.map((t) => (
-                <div key={t.id} className="card p-3 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate">{t.name}</div>
-                    <div className="text-xs text-white/40 mt-0.5">
-                      {t.blocks.length} drills · {t.target} min target
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => loadTemplate(t)}
-                    className="btn btn-primary py-1.5 text-xs shrink-0"
-                  >
-                    Load
-                  </button>
-                  <button
-                    onClick={() => deleteTemplate(t.id)}
-                    className="text-white/30 hover:text-red-400 transition-colors"
-                    title="Delete template"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <button onClick={() => setShowLoadTemplate(false)} className="btn btn-secondary w-full mt-4">
-            Close
-          </button>
-        </Modal>
-      )}
-
-      {/* Save session modal */}
-      {showSaveModal && (
-        <Modal title="Save Session" onClose={() => setShowSaveModal(false)}>
-          <div className="space-y-4">
-            <div>
-              <label className="label">Session name</label>
-              <input type="text" value={session.name} onChange={(e) => setName(e.target.value)} className="input" />
-            </div>
-            <div>
-              <label className="label">Session date</label>
-              <div className="relative">
-                <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 text-accent" size={15} />
+      <AnimatePresence>
+        {showSaveTemplate && (
+          <Modal key="save-template" title="Save as Template" onClose={() => setShowSaveTemplate(false)}>
+            <div className="space-y-4">
+              <div>
+                <label className="label">Template name</label>
                 <input
-                  type="date"
-                  value={saveDate}
-                  onChange={(e) => setSaveDate(e.target.value)}
-                  className="input pl-10"
-                  style={{ colorScheme: "dark" }}
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && confirmSaveTemplate()}
+                  placeholder="e.g. Rapid Fire Warmup"
+                  className="input"
+                  autoFocus
                 />
               </div>
-            </div>
-            <div>
-              <label className="label">Session type</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setSaveStatus("planned")}
-                  className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-semibold transition-all ${
-                    saveStatus === "planned"
-                      ? "border-accent bg-accent/10 text-accent"
-                      : "border-bg-border text-white/50 hover:border-white/30"
-                  }`}
-                >
-                  <CalendarDays size={15} /> Upcoming
-                </button>
-                <button
-                  onClick={() => setSaveStatus("completed")}
-                  className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-semibold transition-all ${
-                    saveStatus === "completed"
-                      ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
-                      : "border-bg-border text-white/50 hover:border-white/30"
-                  }`}
-                >
-                  <CheckCircle2 size={15} /> Completed
-                </button>
+              <div className="text-xs text-white/40">
+                {session.blocks.length} drills · {totalDuration} min total
               </div>
             </div>
-            {/* Player picker */}
-            {players.length > 0 && (
-              <div>
-                <label className="label">Who's attending?</label>
-                <div className="flex flex-wrap gap-2">
-                  {players.map((p) => {
-                    const selected = selectedPlayerIds.includes(p.id);
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => togglePlayer(p.id)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all ${
-                          selected
-                            ? "border-accent bg-accent/10 text-accent"
-                            : "border-bg-border text-white/50 hover:border-white/30 hover:text-white"
-                        }`}
-                      >
-                        <span className="w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-black bg-white/10">
-                          {p.name.charAt(0)}
-                        </span>
-                        {p.name}
-                      </button>
-                    );
-                  })}
-                </div>
+            <div className="flex gap-2 mt-6">
+              <button onClick={() => setShowSaveTemplate(false)} className="btn btn-secondary flex-1">Cancel</button>
+              <button onClick={confirmSaveTemplate} className="btn btn-primary flex-1">
+                <Bookmark size={14} /> Save template
+              </button>
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
+
+      {/* Load template modal */}
+      <AnimatePresence>
+        {showLoadTemplate && (
+          <Modal key="load-template" title="Load Template" onClose={() => setShowLoadTemplate(false)}>
+            {templates.length === 0 ? (
+              <div className="text-center py-8 text-white/40">
+                <BookTemplate className="mx-auto mb-3 opacity-30" size={36} />
+                <p className="text-sm">No templates saved yet.</p>
+                <p className="text-xs mt-1">Build a session and click "Save template".</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {templates.map((t) => (
+                  <div key={t.id} className="card p-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm truncate">{t.name}</div>
+                      <div className="text-xs text-white/40 mt-0.5">
+                        {t.blocks.length} drills · {t.target} min target
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => loadTemplate(t)}
+                      className="btn btn-primary py-1.5 text-xs shrink-0"
+                    >
+                      Load
+                    </button>
+                    <button
+                      onClick={() => deleteTemplate(t.id)}
+                      className="text-white/30 hover:text-red-400 transition-colors"
+                      title="Delete template"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
-
-            <div className="text-xs text-white/40">
-              {session.blocks.length} drills · {totalDuration} min total
-              {selectedPlayerIds.length > 0 ? ` · ${selectedPlayerIds.length} player${selectedPlayerIds.length > 1 ? "s" : ""}` : ""}
-            </div>
-          </div>
-          <div className="flex gap-2 mt-6">
-            <button onClick={() => setShowSaveModal(false)} className="btn btn-secondary flex-1">Cancel</button>
-            <button onClick={confirmSave} className="btn btn-primary flex-1">
-              <Save size={14} /> Save
+            <button onClick={() => setShowLoadTemplate(false)} className="btn btn-secondary w-full mt-4">
+              Close
             </button>
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        )}
+      </AnimatePresence>
+
+      {/* Save session modal */}
+      <AnimatePresence>
+        {showSaveModal && (
+          <Modal key="save-session" title="Save Session" onClose={() => setShowSaveModal(false)}>
+            <div className="space-y-4">
+              <div>
+                <label className="label">Session name</label>
+                <input type="text" value={session.name} onChange={(e) => setName(e.target.value)} className="input" />
+              </div>
+              <div>
+                <label className="label">Session date</label>
+                <div className="relative">
+                  <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 text-accent" size={15} />
+                  <input
+                    type="date"
+                    value={saveDate}
+                    onChange={(e) => setSaveDate(e.target.value)}
+                    className="input pl-10"
+                    style={{ colorScheme: "dark" }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label">Session type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setSaveStatus("planned")}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-semibold transition-all ${
+                      saveStatus === "planned"
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-bg-border text-white/50 hover:border-white/30"
+                    }`}
+                  >
+                    <CalendarDays size={15} /> Upcoming
+                  </button>
+                  <button
+                    onClick={() => setSaveStatus("completed")}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-semibold transition-all ${
+                      saveStatus === "completed"
+                        ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
+                        : "border-bg-border text-white/50 hover:border-white/30"
+                    }`}
+                  >
+                    <CheckCircle2 size={15} /> Completed
+                  </button>
+                </div>
+              </div>
+              {/* Player picker */}
+              {players.length > 0 && (
+                <div>
+                  <label className="label">Who's attending?</label>
+                  <div className="flex flex-wrap gap-2">
+                    {players.map((p) => {
+                      const selected = selectedPlayerIds.includes(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => togglePlayer(p.id)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all ${
+                            selected
+                              ? "border-accent bg-accent/10 text-accent"
+                              : "border-bg-border text-white/50 hover:border-white/30 hover:text-white"
+                          }`}
+                        >
+                          <span className="w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-black bg-white/10">
+                            {p.name.charAt(0)}
+                          </span>
+                          {p.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="text-xs text-white/40">
+                {session.blocks.length} drills · {totalDuration} min total
+                {selectedPlayerIds.length > 0 ? ` · ${selectedPlayerIds.length} player${selectedPlayerIds.length > 1 ? "s" : ""}` : ""}
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button onClick={() => setShowSaveModal(false)} className="btn btn-secondary flex-1">Cancel</button>
+              <button onClick={confirmSave} className="btn btn-primary flex-1">
+                <Save size={14} /> Save
+              </button>
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
 
       {toast && (
         <div className="fixed left-4 right-4 md:left-auto md:right-6 bottom-20 md:bottom-6 z-[45] card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold text-center md:text-left">
@@ -584,18 +605,23 @@ export default function SessionBuilder() {
 function Modal({ title, onClose, children }) {
   useScrollLock(true);
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
-      <div
+    <Motion.div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end sm:items-center justify-center sm:p-4"
+      onClick={onClose}
+      {...modalBackdropMotion}
+    >
+      <Motion.div
         className="card w-full sm:max-w-md p-5 sm:p-6 rounded-t-2xl sm:rounded-xl max-h-[92vh] overflow-y-auto pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-6"
         onClick={(e) => e.stopPropagation()}
+        {...modalPanelMotion}
       >
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-display text-xl font-bold">{title}</h2>
           <button onClick={onClose} className="p-2 -mr-2 text-white/40 hover:text-white"><X size={18} /></button>
         </div>
         {children}
-      </div>
-    </div>
+      </Motion.div>
+    </Motion.div>
   );
 }
 
@@ -621,7 +647,10 @@ function LibraryDrillCard({ drill, onAdd, onPreview }) {
   const info = catById(drill.cat);
 
   return (
-    <div className={`card card-hover group flex items-stretch ${isDragging ? "opacity-40" : ""}`}>
+    <Motion.div
+      whileHover={isDragging ? undefined : drillCardHover}
+      className={`card card-hover group flex items-stretch ${isDragging ? "opacity-40" : ""}`}
+    >
       <div
         ref={setNodeRef}
         {...attributes}
@@ -633,7 +662,7 @@ function LibraryDrillCard({ drill, onAdd, onPreview }) {
       </div>
       <button onClick={onPreview} className="flex-1 p-3 text-left min-w-0">
         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-white/40 mb-1">
-          <span>{info?.icon}</span>
+          <CategoryIcon category={drill.cat} size={11} />
           <span className="truncate">{info?.label}</span>
         </div>
         <div className="font-semibold text-sm mb-1 truncate group-hover:text-accent transition-colors">{drill.name}</div>
@@ -649,7 +678,7 @@ function LibraryDrillCard({ drill, onAdd, onPreview }) {
       >
         <Plus size={16} />
       </button>
-    </div>
+    </Motion.div>
   );
 }
 
@@ -691,7 +720,7 @@ function SessionBlock({ block, index, drills, onUpdate, onRemove }) {
         <div className="flex-1 py-3 pr-3 pl-3 min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-white/40 mb-1">
             <span className="bg-accent/20 text-accent rounded w-5 h-5 flex items-center justify-center text-[10px] shrink-0">{index + 1}</span>
-            <span>{info?.icon}</span>
+            <CategoryIcon category={drill.cat} size={11} />
             <span className="truncate">{info?.label}</span>
             <span className={`tag border ${INT_COLORS[drill.int]} ml-auto`}>{drill.int}</span>
           </div>
@@ -750,10 +779,18 @@ function DrillPreviewModal({ drill, onClose, onAdd }) {
   useScrollLock(true);
   const info = catById(drill.cat);
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4" onClick={onClose}>
-      <div className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8" onClick={(e) => e.stopPropagation()}>
+    <Motion.div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
+      onClick={onClose}
+      {...modalBackdropMotion}
+    >
+      <Motion.div
+        className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
+        onClick={(e) => e.stopPropagation()}
+        {...modalPanelMotion}
+      >
         <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-white/50 mb-2">
-          <span>{info?.icon}</span><span>{info?.label}</span>
+          <CategoryIcon category={drill.cat} size={13} /><span>{info?.label}</span>
         </div>
         <div className="flex items-start justify-between gap-4 mb-4">
           <h2 className="font-display text-2xl font-bold">{drill.name}</h2>
@@ -774,8 +811,8 @@ function DrillPreviewModal({ drill, onClose, onAdd }) {
           <button onClick={onClose} className="btn btn-secondary flex-1">Close</button>
           <button onClick={onAdd} className="btn btn-primary flex-1"><Plus size={14} /> Add to session</button>
         </div>
-      </div>
-    </div>
+      </Motion.div>
+    </Motion.div>
   );
 }
 

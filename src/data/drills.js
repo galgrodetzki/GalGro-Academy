@@ -2,19 +2,19 @@
 
 
 export const CATEGORIES = [
-  { key: "shot-stopping", label: "Shot Stopping", icon: "\u{1F9E4}", color: "#2563eb", bg: "#dbeafe", desc: "Saves from driven shots, volleys, close-range, and long-range" },
-  { key: "diving", label: "Diving", icon: "\u{1F938}", color: "#7c3aed", bg: "#ede9fe", desc: "Collapse dives, extension dives, low dives, recovery dives" },
-  { key: "reflexes", label: "Reflexes & Reactions", icon: "\u26A1", color: "#dc2626", bg: "#fee2e2", desc: "Reaction speed, hand-eye coordination, rapid-fire saves" },
-  { key: "footwork", label: "Footwork & Agility", icon: "\u{1F45F}", color: "#0891b2", bg: "#cffafe", desc: "Lateral shuffles, agility patterns, explosive movement" },
-  { key: "positioning", label: "Positioning & Angles", icon: "\u{1F4D0}", color: "#ea580c", bg: "#ffedd5", desc: "Angle play, set position, narrowing, depth management" },
-  { key: "distribution", label: "Distribution", icon: "\u{1F9B6}", color: "#16a34a", bg: "#dcfce7", desc: "Throws, kicks, goal kicks, playing out from back, sweeper" },
-  { key: "crosses", label: "Crosses & High Balls", icon: "\u2708\uFE0F", color: "#be185d", bg: "#fce7f3", desc: "Claiming, punching, box command, corner management" },
-  { key: "1v1", label: "1v1 Situations", icon: "\u{1F3AF}", color: "#9333ea", bg: "#f3e8ff", desc: "Breakaways, closing down, smothering, staying on feet" },
-  { key: "set-pieces", label: "Set Pieces & Penalties", icon: "\u{1F3C1}", color: "#b45309", bg: "#fef3c7", desc: "Corner organization, free kicks, wall setup, penalty routines" },
-  { key: "communication", label: "Communication & Leadership", icon: "\u{1F4E2}", color: "#0d9488", bg: "#ccfbf1", desc: "Box command, back-line management, vocal presence" },
-  { key: "physical", label: "Physical Conditioning", icon: "\u{1F4AA}", color: "#e11d48", bg: "#ffe4e6", desc: "GK-specific power, plyometrics, endurance under fatigue" },
-  { key: "mental", label: "Mental & Decision Making", icon: "\u{1F9E0}", color: "#6366f1", bg: "#e0e7ff", desc: "Visualization, pressure training, decision speed, confidence" },
-  { key: "recovery", label: "Warm-Up & Recovery", icon: "\u{1F504}", color: "#65a30d", bg: "#ecfccb", desc: "Dynamic warm-ups, cool downs, mobility, active recovery" },
+  { key: "shot-stopping", label: "Shot Stopping", icon: "shield-check", color: "#2563eb", bg: "#dbeafe", desc: "Saves from driven shots, volleys, close-range, and long-range" },
+  { key: "diving", label: "Diving", icon: "waves", color: "#7c3aed", bg: "#ede9fe", desc: "Collapse dives, extension dives, low dives, recovery dives" },
+  { key: "reflexes", label: "Reflexes & Reactions", icon: "zap", color: "#dc2626", bg: "#fee2e2", desc: "Reaction speed, hand-eye coordination, rapid-fire saves" },
+  { key: "footwork", label: "Footwork & Agility", icon: "footprints", color: "#0891b2", bg: "#cffafe", desc: "Lateral shuffles, agility patterns, explosive movement" },
+  { key: "positioning", label: "Positioning & Angles", icon: "crosshair", color: "#ea580c", bg: "#ffedd5", desc: "Angle play, set position, narrowing, depth management" },
+  { key: "distribution", label: "Distribution", icon: "send", color: "#16a34a", bg: "#dcfce7", desc: "Throws, kicks, goal kicks, playing out from back, sweeper" },
+  { key: "crosses", label: "Crosses & High Balls", icon: "move-up-right", color: "#be185d", bg: "#fce7f3", desc: "Claiming, punching, box command, corner management" },
+  { key: "1v1", label: "1v1 Situations", icon: "target", color: "#9333ea", bg: "#f3e8ff", desc: "Breakaways, closing down, smothering, staying on feet" },
+  { key: "set-pieces", label: "Set Pieces & Penalties", icon: "flag", color: "#b45309", bg: "#fef3c7", desc: "Corner organization, free kicks, wall setup, penalty routines" },
+  { key: "communication", label: "Communication & Leadership", icon: "megaphone", color: "#0d9488", bg: "#ccfbf1", desc: "Box command, back-line management, vocal presence" },
+  { key: "physical", label: "Physical Conditioning", icon: "dumbbell", color: "#e11d48", bg: "#ffe4e6", desc: "GK-specific power, plyometrics, endurance under fatigue" },
+  { key: "mental", label: "Mental & Decision Making", icon: "brain", color: "#6366f1", bg: "#e0e7ff", desc: "Visualization, pressure training, decision speed, confidence" },
+  { key: "recovery", label: "Warm-Up & Recovery", icon: "refresh-cw", color: "#65a30d", bg: "#ecfccb", desc: "Dynamic warm-ups, cool downs, mobility, active recovery" },
 ];
 
 export const INTENSITY = ["Low", "Medium", "High", "Max"];

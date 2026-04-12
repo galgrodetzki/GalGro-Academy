@@ -86,7 +86,16 @@ export function DataProvider({ children }) {
 
   // ── Load all data ─────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
-    if (!user) { setDataLoading(false); return; }
+    if (!user) {
+      setSessions([]);
+      setPlayers([]);
+      setTemplates([]);
+      setSettings({ coachName: "Coach", defaultTarget: 60 });
+      setCustomDrills([]);
+      setProposals([]);
+      setDataLoading(false);
+      return;
+    }
     setDataLoading(true);
     const [sRes, pRes, tRes, settRes, cdRes, propRes] = await Promise.all([
       supabase.from("sessions").select("*").order("created_at", { ascending: false }),
@@ -165,8 +174,9 @@ export function DataProvider({ children }) {
   // ── Settings ──────────────────────────────────────────────────────────────
   const saveSettings = async (newSettings) => {
     const row = { user_id: user.id, coach_name: newSettings.coachName, default_target: newSettings.defaultTarget };
-    await supabase.from("settings").upsert(row, { onConflict: "user_id" });
-    setSettings(newSettings);
+    const { error } = await supabase.from("settings").upsert(row, { onConflict: "user_id" });
+    if (!error) setSettings(newSettings);
+    return error;
   };
 
   // ── Agent proposals ───────────────────────────────────────────────────────
@@ -194,10 +204,15 @@ export function DataProvider({ children }) {
     if (drillErr) return drillErr;
 
     // Mark proposal as approved
-    await supabase
+    const { error: proposalErr } = await supabase
       .from("agent_proposals")
       .update({ status: "approved", reviewed_at: new Date().toISOString(), reviewed_by: user.id })
       .eq("id", proposal.id);
+    if (proposalErr) {
+      const { error: cleanupErr } = await supabase.from("custom_drills").delete().eq("id", drillData.id);
+      if (cleanupErr) return new Error(`${proposalErr.message} Custom drill cleanup also failed: ${cleanupErr.message}`);
+      return proposalErr;
+    }
 
     setCustomDrills((prev) => [toCustomDrill(drillData), ...prev]);
     setProposals((prev) => prev.map((p) => p.id === proposal.id ? { ...p, status: "approved" } : p));
@@ -205,12 +220,12 @@ export function DataProvider({ children }) {
   };
 
   const rejectProposal = async (id) => {
-    await supabase
+    const { error } = await supabase
       .from("agent_proposals")
       .update({ status: "rejected", reviewed_at: new Date().toISOString(), reviewed_by: user.id })
       .eq("id", id);
-    setProposals((prev) => prev.map((p) => p.id === id ? { ...p, status: "rejected" } : p));
-    return null;
+    if (!error) setProposals((prev) => prev.map((p) => p.id === id ? { ...p, status: "rejected" } : p));
+    return error;
   };
 
   const deleteCustomDrill = async (id) => {

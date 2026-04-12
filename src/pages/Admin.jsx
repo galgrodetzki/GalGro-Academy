@@ -188,6 +188,10 @@ export default function Admin() {
       .insert({ code, role, created_by: user.id })
       .select()
       .single();
+    if (error) {
+      showToast(`Could not create invite: ${error.message}`);
+      return;
+    }
     if (!error && data) {
       setInvites((prev) => [data, ...prev]);
       copyCode(data.code);
@@ -196,7 +200,11 @@ export default function Admin() {
   };
 
   const deleteInvite = async (id) => {
-    await supabase.from("invites").delete().eq("id", id);
+    const { error } = await supabase.from("invites").delete().eq("id", id);
+    if (error) {
+      showToast(`Could not delete invite: ${error.message}`);
+      return;
+    }
     setInvites((prev) => prev.filter((i) => i.id !== id));
   };
 
@@ -207,7 +215,11 @@ export default function Admin() {
   };
 
   const updateRole = async (profileId, newRole) => {
-    await supabase.from("profiles").update({ role: newRole }).eq("id", profileId);
+    const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", profileId);
+    if (error) {
+      showToast(`Could not update role: ${error.message}`);
+      return;
+    }
     setProfiles((prev) => prev.map((p) => p.id === profileId ? { ...p, role: newRole } : p));
     showToast("Role updated");
   };
@@ -222,15 +234,17 @@ export default function Admin() {
 
   const handleReject = async (id) => {
     setActionLoading(true);
-    await rejectProposal(id);
-    showToast("Proposal rejected.");
+    const err = await rejectProposal(id);
+    if (err) showToast("Error: " + err.message);
+    else showToast("Proposal rejected.");
     setActionLoading(false);
   };
 
   const handleDeleteDrill = async (id, name) => {
     setActionLoading(true);
-    await deleteCustomDrill(id);
-    showToast(`"${name}" removed from library.`);
+    const err = await deleteCustomDrill(id);
+    if (err) showToast("Error: " + err.message);
+    else showToast(`"${name}" removed from library.`);
     setActionLoading(false);
   };
 

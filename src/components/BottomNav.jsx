@@ -1,8 +1,10 @@
 import { LayoutDashboard, BookOpen, Layers, Users, Calendar, Shield } from "lucide-react";
+import { motion as Motion } from "framer-motion";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { EMPTY_SESSION } from "../hooks/useSession";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
+import { bottomNavTap } from "../utils/motion";
 
 const NAV = [
   { key: "dashboard", label: "Home",     icon: LayoutDashboard },
@@ -14,14 +16,15 @@ const NAV = [
 
 export default function BottomNav({ page, setPage }) {
   const [currentSession] = useLocalStorage("galgro-current-session", EMPTY_SESSION);
-  const { isCoach } = useAuth();
+  const { isCoach, canEdit } = useAuth();
   const { pendingProposalCount } = useData();
   const hasSessionInProgress = (currentSession?.blocks?.length ?? 0) > 0;
 
   // On mobile, replace "Players" with "Admin" for coaches so they can access the inbox
+  const baseNav = canEdit ? NAV : NAV.filter(({ key }) => key !== "builder" && key !== "players");
   const nav = isCoach
     ? [...NAV.slice(0, 4), { key: "admin", label: "Admin", icon: Shield }]
-    : NAV;
+    : baseNav;
 
   return (
     <nav
@@ -33,9 +36,10 @@ export default function BottomNav({ page, setPage }) {
           const showDot  = key === "builder" && hasSessionInProgress && !active;
           const showBadge = key === "admin" && pendingProposalCount > 0 && !active;
           return (
-            <button
+            <Motion.button
               key={key}
               onClick={() => setPage(key)}
+              whileTap={bottomNavTap}
               className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-2.5 min-w-0 transition-colors ${
                 active ? "text-accent" : "text-white/50 active:text-white"
               }`}
@@ -55,7 +59,7 @@ export default function BottomNav({ page, setPage }) {
               {active && (
                 <span className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-0.5 rounded-b-full bg-accent" />
               )}
-            </button>
+            </Motion.button>
           );
         })}
       </div>
