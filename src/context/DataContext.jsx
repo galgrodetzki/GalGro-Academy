@@ -112,7 +112,7 @@ export function DataProvider({ children }) {
 
   // ── Load all data ─────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
-    if (!user) {
+    if (!user || profile?.role === "revoked") {
       setSessions([]);
       setPlayers([]);
       setTemplates([]);
@@ -150,7 +150,7 @@ export function DataProvider({ children }) {
     if (knRes.data)   setKeeperNotes(knRes.data.map(toKeeperNote));
     setMemberProfiles(profRes.data ? profRes.data.map(toProfile) : []);
     setDataLoading(false);
-  }, [user, isCoach, canEdit]);
+  }, [user, profile?.role, isCoach, canEdit]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 

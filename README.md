@@ -76,6 +76,7 @@ supabase/
   rls_policies.sql
   keeper_features.sql
   keeper_profile_linking.sql
+  access_revocation.sql
 ```
 
 ## App Model
@@ -138,6 +139,8 @@ The signup flow calls the `is_first_account()` RPC from that SQL file when avail
 Keeper-facing notes use `supabase/keeper_features.sql` for the `keeper_session_notes` table and the optional `players.profile_id` roster-account link.
 
 If the database already ran `keeper_features.sql` before the roster-account linking UI shipped, apply `supabase/keeper_profile_linking.sql` once to tighten the keeper note name-match fallback.
+
+Head-coach access revocation uses `supabase/access_revocation.sql` to add the `revoked` role and block revoked profiles from app data through RLS.
 
 ## Product Roadmap
 

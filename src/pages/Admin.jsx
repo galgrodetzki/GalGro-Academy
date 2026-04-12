@@ -14,6 +14,12 @@ const ROLES = [
   { value: "keeper",    label: "Keeper",          desc: "Can view sessions & add notes" },
   { value: "viewer",    label: "Viewer",           desc: "Read-only access" },
 ];
+const MEMBER_ROLES = [
+  { value: "assistant", label: "assistant" },
+  { value: "keeper",    label: "keeper" },
+  { value: "viewer",    label: "viewer" },
+  { value: "revoked",   label: "revoked" },
+];
 
 function makeCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -224,13 +230,19 @@ export default function Admin() {
 
   const updateRole = async (profileId, newRole) => {
     if (!isCoach) { showToast("Only the head coach can update roles."); return; }
+    if (profileId === user.id) { showToast("You cannot change your own role."); return; }
+    const member = profiles.find((p) => p.id === profileId);
+    if (!member || member.role === newRole) return;
+    if (newRole === "revoked" && !confirm(`Revoke access for ${member.name}? They will be blocked from the portal, but their history stays in the academy records.`)) {
+      return;
+    }
     const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", profileId);
     if (error) {
       showToast(`Could not update role: ${error.message}`);
       return;
     }
     setProfiles((prev) => prev.map((p) => p.id === profileId ? { ...p, role: newRole } : p));
-    showToast("Role updated");
+    showToast(newRole === "revoked" ? "Access revoked" : "Role updated");
   };
 
   const handleApprove = async (proposal) => {
@@ -262,6 +274,7 @@ export default function Admin() {
     assistant:  "text-electric border-electric/30 bg-electric/10",
     keeper:     "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
     viewer:     "text-white/50 border-bg-border bg-bg-card2",
+    revoked:    "text-red-300 border-red-500/30 bg-red-500/10",
   };
   const linkedPlayerForProfile = (profileId) =>
     players.find((player) => player.profileId === profileId);
@@ -389,6 +402,12 @@ export default function Admin() {
                             )}
                           </>
                         )}
+                        {p.role === "revoked" && (
+                          <>
+                            <span>·</span>
+                            <span className="text-red-300/80">No portal access</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     {p.id === user.id ? (
@@ -401,8 +420,8 @@ export default function Admin() {
                         onChange={(e) => updateRole(p.id, e.target.value)}
                         className="bg-bg-card border border-bg-border rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-accent"
                       >
-                        {["assistant", "keeper", "viewer"].map((r) => (
-                          <option key={r} value={r}>{r.replace("_", " ")}</option>
+                        {MEMBER_ROLES.map((r) => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
                         ))}
                       </select>
                     )}

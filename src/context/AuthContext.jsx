@@ -45,10 +45,11 @@ export function AuthProvider({ children }) {
   const isAssistant = profile?.role === "assistant";
   const isKeeper    = profile?.role === "keeper";
   const isViewer    = profile?.role === "viewer";
+  const isRevoked   = profile?.role === "revoked";
   const canEdit     = isCoach || isAssistant;
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut, fetchProfile, isCoach, isAssistant, isKeeper, isViewer, canEdit }}>
+    <AuthContext.Provider value={{ user, profile, loading, signOut, fetchProfile, isCoach, isAssistant, isKeeper, isViewer, isRevoked, canEdit }}>
       {children}
     </AuthContext.Provider>
   );

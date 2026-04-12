@@ -27,6 +27,7 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
     assistant:  "Assistant Coach",
     keeper:     "Goalkeeper",
     viewer:     "Viewer",
+    revoked:    "Access Revoked",
   }[profile?.role] ?? "Member";
   const navItems = canEdit ? NAV : NAV.filter(({ key }) => key !== "builder" && key !== "players");
 
