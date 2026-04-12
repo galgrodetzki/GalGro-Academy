@@ -1,7 +1,8 @@
-import { BookOpen, Layers, Users, Calendar, TrendingUp, Sparkles } from "lucide-react";
+import { BookOpen, Layers, Users, Calendar, Sparkles } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { DRILLS, CATEGORIES } from "../data/drills";
-import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useData } from "../context/DataContext";
+import { useAuth } from "../context/AuthContext";
 
 function StatCard({ icon: Icon, value, label, accent = "accent", gradient }) {
   return (
@@ -22,27 +23,28 @@ function StatCard({ icon: Icon, value, label, accent = "accent", gradient }) {
 export default function Dashboard({ setPage }) {
   const totalDrills = DRILLS.length;
   const totalCategories = CATEGORIES.length;
-  const [savedSessions] = useLocalStorage("galgro-sessions", []);
-  const [players] = useLocalStorage("galgro-players", []);
+  const { sessions: savedSessions, players } = useData();
+  const { profile } = useAuth();
+  const coachName = profile?.name ?? "Coach";
 
   return (
     <div>
       <PageHeader
-        title="Welcome back, Gal 🥅"
+        title={`Welcome back, ${coachName} 🥅`}
         subtitle="Your goalkeeping academy command center"
       />
 
       {/* Hero banner */}
-      <div className="card p-6 mb-6 relative overflow-hidden bg-gradient-to-br from-bg-card via-bg-card to-bg-card2 border-accent/20">
+      <div className="card p-5 md:p-6 mb-5 md:mb-6 relative overflow-hidden bg-gradient-to-br from-bg-card via-bg-card to-bg-card2 border-accent/20">
         <div className="absolute right-0 top-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
         <div className="relative">
-          <div className="flex items-center gap-2 text-accent text-xs font-bold uppercase tracking-widest mb-2">
+          <div className="flex items-center gap-2 text-accent text-[11px] md:text-xs font-bold uppercase tracking-widest mb-2">
             <Sparkles size={14} />
             Welcome to GalGro's Academy
           </div>
-          <h2 className="font-display text-2xl font-bold mb-2">Build your next session</h2>
+          <h2 className="font-display text-xl md:text-2xl font-bold mb-2">Build your next session</h2>
           <p className="text-white/60 text-sm max-w-xl mb-4">
-            Drag-and-drop from your library of 95 professional drills, organized across 13 categories. Create structured sessions with warmup, main work, and cooldown blocks.
+            Drag-and-drop from your library of 95 professional drills, organized across 13 categories.
           </p>
           <button onClick={() => setPage("builder")} className="btn btn-primary">
             <Layers size={16} />
@@ -52,7 +54,7 @@ export default function Dashboard({ setPage }) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
         <StatCard
           icon={BookOpen}
           value={totalDrills}
@@ -84,7 +86,7 @@ export default function Dashboard({ setPage }) {
       </div>
 
       {/* Quick actions grid */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
         <button onClick={() => setPage("library")} className="card card-hover p-5 text-left group">
           <BookOpen className="text-accent mb-3" size={22} />
           <div className="font-bold mb-1">Browse Drills</div>

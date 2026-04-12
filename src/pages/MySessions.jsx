@@ -1,11 +1,13 @@
 import { useState } from "react";
+import { useScrollLock } from "../hooks/useScrollLock";
 import {
   Calendar, Clock, Trash2, Eye, Layers,
   CheckCircle2, CalendarDays, PenLine, X, Save, Users,
   FileDown, UserCheck,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
-import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useData } from "../context/DataContext";
+import { useAuth } from "../context/AuthContext";
 import { DRILLS, CATEGORIES } from "../data/drills";
 import { exportSessionPDF } from "../utils/exportPDF";
 
@@ -22,12 +24,15 @@ const formatDate = (iso) =>
     : "No date set";
 
 export default function MySessions() {
-  const [savedSessions, setSavedSessions] = useLocalStorage("galgro-sessions", []);
-  const [players] = useLocalStorage("galgro-players", []);
-  const [viewing, setViewing] = useState(null);
-  const [editing, setEditing] = useState(null); // session being recapped
+  const { sessions: savedSessions, players, updateSession: dbUpdate, removeSession: dbRemove } = useData();
+  const { canEdit } = useAuth();
+  const [viewingId, setViewingId] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [editData, setEditData] = useState(null);
   const [tab, setTab] = useState("upcoming");
+
+  // Always derive from live data
+  const viewing = viewingId ? savedSessions.find((s) => s.id === viewingId) ?? null : null;
 
   const upcoming = [...savedSessions]
     .filter((s) => s.status === "planned" || !s.status)
@@ -38,21 +43,21 @@ export default function MySessions() {
     .sort((a, b) => (a.sessionDate || "") > (b.sessionDate || "") ? -1 : 1);
 
   const displayed = tab === "upcoming" ? upcoming : past;
+  useScrollLock(!!(viewing || editing));
 
-  const updateSession = (updated) => {
-    setSavedSessions(savedSessions.map((s) => s.id === updated.id ? updated : s));
+  const updateSession = async (updated) => {
+    await dbUpdate(updated);
   };
 
-  const removeSession = (id) => {
+  const removeSession = async (id) => {
     if (!confirm("Delete this session?")) return;
-    setSavedSessions(savedSessions.filter((s) => s.id !== id));
-    if (viewing?.id === id) setViewing(null);
+    await dbRemove(id);
+    if (viewingId === id) setViewingId(null);
   };
 
-  const markCompleted = (id) => {
-    setSavedSessions(savedSessions.map((s) =>
-      s.id === id ? { ...s, status: "completed" } : s
-    ));
+  const markCompleted = async (id) => {
+    const s = savedSessions.find((x) => x.id === id);
+    if (s) await dbUpdate({ ...s, status: "completed" });
   };
 
   // Open recap editor
@@ -60,6 +65,7 @@ export default function MySessions() {
     setEditing(s);
     setEditData({
       sessionNotes: s.sessionNotes || "",
+      attendance: s.attendance ?? s.playerIds ?? [],
       blocks: s.blocks.map((b) => ({
         ...b,
         actualDur: b.actualDur ?? b.dur,
@@ -68,15 +74,13 @@ export default function MySessions() {
     });
   };
 
-  const saveRecap = () => {
-    const updated = {
+  const saveRecap = async () => {
+    await updateSession({
       ...editing,
       sessionNotes: editData.sessionNotes,
       blocks: editData.blocks,
-      attendance: editData.attendance ?? editing.playerIds ?? [],
-    };
-    updateSession(updated);
-    if (viewing?.id === editing.id) setViewing(updated);
+      attendance: editData.attendance,
+    });
     setEditing(null);
     setEditData(null);
   };
@@ -96,7 +100,7 @@ export default function MySessions() {
       />
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-bg-card border border-bg-border rounded-xl p-1 w-fit">
+      <div className="flex gap-1 mb-5 md:mb-6 bg-bg-card border border-bg-border rounded-xl p-1 w-full sm:w-fit">
         <TabBtn active={tab === "upcoming"} onClick={() => setTab("upcoming")}>
           <CalendarDays size={14} /> Upcoming
           {upcoming.length > 0 && (
@@ -135,7 +139,7 @@ export default function MySessions() {
               session={s}
               tab={tab}
               players={players}
-              onView={() => setViewing(s)}
+              onView={() => setViewingId(s.id)}
               onDelete={() => removeSession(s.id)}
               onMarkCompleted={() => markCompleted(s.id)}
               onRecap={() => openRecap(s)}
@@ -147,11 +151,11 @@ export default function MySessions() {
       {/* Detail view modal */}
       {viewing && !editing && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => setViewing(null)}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
+          onClick={() => setViewingId(null)}
         >
           <div
-            className="card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-8"
+            className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-2 mb-1">
@@ -255,18 +259,26 @@ export default function MySessions() {
               <button
                 onClick={() => exportSessionPDF(viewing, { players, drills: DRILLS, categories: CATEGORIES })}
                 className="btn btn-secondary flex-1"
+                title="Dark theme PDF"
               >
                 <FileDown size={14} /> Export PDF
               </button>
+              <button
+                onClick={() => exportSessionPDF(viewing, { players, drills: DRILLS, categories: CATEGORIES, printMode: true })}
+                className="btn btn-secondary flex-1"
+                title="Light background — better for printing on paper"
+              >
+                <FileDown size={14} /> Print PDF
+              </button>
               {viewing.status === "completed" && (
                 <button
-                  onClick={() => { setViewing(null); openRecap(viewing); }}
+                  onClick={() => { setViewingId(null); openRecap(viewing); }}
                   className="btn btn-secondary flex-1"
                 >
                   <PenLine size={14} /> Edit recap
                 </button>
               )}
-              <button onClick={() => setViewing(null)} className="btn btn-secondary flex-1">Close</button>
+              <button onClick={() => setViewingId(null)} className="btn btn-secondary flex-1">Close</button>
             </div>
           </div>
         </div>
@@ -275,11 +287,11 @@ export default function MySessions() {
       {/* Recap editor modal */}
       {editing && editData && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setEditing(null)}
         >
           <div
-            className="card max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8"
+            className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[90vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-2">
@@ -414,7 +426,7 @@ function TabBtn({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${active ? "bg-accent text-black" : "text-white/50 hover:text-white"}`}
+      className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${active ? "bg-accent text-black" : "text-white/50 hover:text-white"}`}
     >
       {children}
     </button>

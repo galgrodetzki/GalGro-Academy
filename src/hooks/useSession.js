@@ -3,18 +3,18 @@ import { useLocalStorage } from "./useLocalStorage";
 
 const STORAGE_KEY = "galgro-current-session";
 
-function makeId() {
+export function makeBlockId() {
   return "b_" + Math.random().toString(36).slice(2, 10);
 }
 
-const EMPTY = {
+export const EMPTY_SESSION = {
   name: "Untitled Session",
   target: 60,
-  blocks: [], // { blockId, drillId, dur, rest, notes }
+  blocks: [],
 };
 
 export function useSession() {
-  const [session, setSession] = useLocalStorage(STORAGE_KEY, EMPTY);
+  const [session, setSession] = useLocalStorage(STORAGE_KEY, EMPTY_SESSION);
 
   const setName = useCallback(
     (name) => setSession((s) => ({ ...s, name })),
@@ -26,21 +26,38 @@ export function useSession() {
     [setSession]
   );
 
+  // Add a drill — respects a custom duration if provided
   const addDrill = useCallback(
-    (drill, index = null) =>
+    (drill, overrides = {}) =>
       setSession((s) => {
         const block = {
-          blockId: makeId(),
+          blockId: makeBlockId(),
           drillId: drill.id,
-          dur: drill.dur || 5,
-          rest: 1,
-          notes: "",
+          dur: overrides.dur ?? drill.dur ?? 5,
+          rest: overrides.rest ?? 1,
+          notes: overrides.notes ?? "",
         };
-        const blocks = [...s.blocks];
-        if (index === null || index >= blocks.length) blocks.push(block);
-        else blocks.splice(index, 0, block);
-        return { ...s, blocks };
+        return { ...s, blocks: [...s.blocks, block] };
       }),
+    [setSession]
+  );
+
+  // Load a template atomically — no race condition, preserves custom durations
+  const loadFromTemplate = useCallback(
+    (tmpl) => {
+      const blocks = tmpl.blocks.map((b) => ({
+        blockId: makeBlockId(),
+        drillId: b.drillId,
+        dur: b.dur ?? 5,
+        rest: b.rest ?? 1,
+        notes: b.notes || "",
+      }));
+      setSession({
+        name: tmpl.name,
+        target: tmpl.target || 60,
+        blocks,
+      });
+    },
     [setSession]
   );
 
@@ -76,7 +93,7 @@ export function useSession() {
   );
 
   const clearSession = useCallback(
-    () => setSession(EMPTY),
+    () => setSession({ ...EMPTY_SESSION }),
     [setSession]
   );
 
@@ -85,6 +102,7 @@ export function useSession() {
     setName,
     setTarget,
     addDrill,
+    loadFromTemplate,
     removeBlock,
     updateBlock,
     reorderBlocks,

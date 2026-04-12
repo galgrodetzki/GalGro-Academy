@@ -5,22 +5,22 @@ export default {
     extend: {
       colors: {
         bg: {
-          DEFAULT: "#070710",
-          soft: "#0d0d1a",
-          card: "#13131f",
-          card2: "#1a1a2a",
-          border: "#252540",
+          DEFAULT: "#0b0e17",   // slightly warmer navy-dark, not pure black
+          soft: "#111520",      // sidebar / panels
+          card: "#181d2e",      // cards — navy tint
+          card2: "#1f2538",     // secondary cards
+          border: "#2a3048",    // borders — visible but subtle
         },
         accent: {
-          DEFAULT: "#00ff87",
-          dark: "#00cc6a",
-          glow: "#39ff14",
+          DEFAULT: "#00e87a",   // slightly less neon green — easier on eyes
+          dark: "#00bf63",
+          glow: "#00ff87",
         },
         orange: {
           DEFAULT: "#ff6b35",
         },
         electric: {
-          DEFAULT: "#4488ff",
+          DEFAULT: "#4d8fff",   // slightly richer blue
           purple: "#a855f7",
           pink: "#ec4899",
         },

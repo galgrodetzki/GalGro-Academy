@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Search, Clock, Zap, Package, ChevronRight } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
+import { useScrollLock } from "../hooks/useScrollLock";
 
 const INT_COLORS = {
   Low: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -32,6 +33,7 @@ export default function DrillLibrary() {
   }, [search, cat, intensity]);
 
   const catInfo = (key) => CATEGORIES.find((c) => c.key === key);
+  useScrollLock(!!selected);
 
   return (
     <div>
@@ -41,13 +43,13 @@ export default function DrillLibrary() {
       />
 
       {/* Search + filters */}
-      <div className="card p-4 mb-4">
-        <div className="flex items-center gap-3 mb-3">
+      <div className="card p-3 md:p-4 mb-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 mb-3">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={16} />
             <input
               type="text"
-              placeholder="Search drills by name or description..."
+              placeholder="Search drills..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input pl-10"
@@ -56,7 +58,7 @@ export default function DrillLibrary() {
           <select
             value={intensity}
             onChange={(e) => setIntensity(e.target.value)}
-            className="input w-40"
+            className="input sm:w-40"
           >
             <option value="all">All intensities</option>
             {INTENSITY.map((i) => (
@@ -65,11 +67,11 @@ export default function DrillLibrary() {
           </select>
         </div>
 
-        {/* Category chips */}
-        <div className="flex flex-wrap gap-2">
+        {/* Category chips — horizontal scroll on mobile */}
+        <div className="flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto pb-1 -mx-1 px-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
           <button
             onClick={() => setCat("all")}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex-shrink-0 whitespace-nowrap ${
               cat === "all"
                 ? "bg-accent text-black"
                 : "bg-bg-card2 text-white/60 hover:text-white border border-bg-border"
@@ -84,7 +86,7 @@ export default function DrillLibrary() {
               <button
                 key={c.key}
                 onClick={() => setCat(c.key)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
                   active
                     ? "bg-accent text-black"
                     : "bg-bg-card2 text-white/60 hover:text-white border border-bg-border"
@@ -149,11 +151,11 @@ export default function DrillLibrary() {
       {/* Drill detail modal */}
       {selected && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setSelected(null)}
         >
           <div
-            className="card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-8"
+            className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-white/50 mb-2">

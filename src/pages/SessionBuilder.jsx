@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { useScrollLock } from "../hooks/useScrollLock";
 import {
   DndContext,
   closestCenter,
@@ -37,17 +38,9 @@ import {
 import PageHeader from "../components/PageHeader";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useSession } from "../hooks/useSession";
-import { useLocalStorage } from "../hooks/useLocalStorage";
+import { useData } from "../context/DataContext";
+import { drillById, catById, INT_COLORS } from "../utils/drillUtils";
 
-const INT_COLORS = {
-  Low: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  Medium: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  High: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  Max: "bg-red-500/10 text-red-400 border-red-500/20",
-};
-
-const drillById = (id) => DRILLS.find((d) => d.id === id);
-const catById = (key) => CATEGORIES.find((c) => c.key === key);
 const todayISO = () => new Date().toISOString().split("T")[0];
 
 export default function SessionBuilder() {
@@ -56,6 +49,7 @@ export default function SessionBuilder() {
     setName,
     setTarget,
     addDrill,
+    loadFromTemplate,
     removeBlock,
     updateBlock,
     reorderBlocks,
@@ -67,6 +61,7 @@ export default function SessionBuilder() {
   const [intensity, setIntensity] = useState("all");
   const [activeDrag, setActiveDrag] = useState(null);
   const [previewDrill, setPreviewDrill] = useState(null);
+  const [mobileTab, setMobileTab] = useState("library"); // "library" | "session" — only used on mobile
 
   // Save session modal
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -74,13 +69,19 @@ export default function SessionBuilder() {
   const [saveStatus, setSaveStatus] = useState("planned");
 
   // Templates
-  const [templates, setTemplates] = useLocalStorage("galgro-templates", []);
+  const { templates, addTemplate, removeTemplate, addSession, players, settings } = useData();
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [showLoadTemplate, setShowLoadTemplate] = useState(false);
-
-  const [savedSessions, setSavedSessions] = useLocalStorage("galgro-sessions", []);
   const [toast, setToast] = useState("");
+
+  // Apply defaultTarget from settings on fresh session
+  useEffect(() => {
+    if (session.blocks.length === 0 && session.target === 60 && settings.defaultTarget !== 60) {
+      setTarget(settings.defaultTarget);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -136,45 +137,34 @@ export default function SessionBuilder() {
     setShowSaveTemplate(true);
   };
 
-  const confirmSaveTemplate = () => {
+  const confirmSaveTemplate = async () => {
     if (!templateName.trim()) { showToast("Give the template a name"); return; }
     const tmpl = {
       id: "t_" + Date.now(),
       name: templateName.trim(),
-      createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
       target: session.target,
-      blocks: session.blocks.map(({ blockId: _, ...rest }) => rest), // strip blockIds
+      blocks: session.blocks.map(({ blockId: _, ...rest }) => rest),
     };
-    setTemplates([tmpl, ...templates]);
+    await addTemplate(tmpl);
     setShowSaveTemplate(false);
     setTemplateName("");
     showToast(`Template "${tmpl.name}" saved`);
   };
 
-  // Load template
   const loadTemplate = (tmpl) => {
     if (session.blocks.length > 0 && !confirm("This will replace your current session. Continue?")) return;
-    clearSession();
-    // Small delay to let state reset, then add blocks
-    setTimeout(() => {
-      setName(tmpl.name);
-      setTarget(tmpl.target || 60);
-      tmpl.blocks.forEach((b) => {
-        const drill = drillById(b.drillId);
-        if (drill) addDrill(drill);
-      });
-    }, 50);
+    loadFromTemplate(tmpl);
     setShowLoadTemplate(false);
-    showToast(`Loaded template "${tmpl.name}"`);
+    showToast(`Loaded "${tmpl.name}"`);
   };
 
-  const deleteTemplate = (id) => {
-    setTemplates(templates.filter((t) => t.id !== id));
+  const deleteTemplate = async (id) => {
+    await removeTemplate(id);
   };
 
   // Save session
   const [selectedPlayerIds, setSelectedPlayerIds] = useState([]);
-  const [players] = useLocalStorage("galgro-players", []);
 
   const openSaveModal = () => {
     if (session.blocks.length === 0) { showToast("Add at least one drill before saving"); return; }
@@ -190,10 +180,9 @@ export default function SessionBuilder() {
     );
   };
 
-  const confirmSave = () => {
+  const confirmSave = async () => {
     const saved = {
       id: "s_" + Date.now(),
-      savedAt: new Date().toISOString(),
       sessionDate: saveDate,
       status: saveStatus,
       name: session.name,
@@ -202,8 +191,10 @@ export default function SessionBuilder() {
       totalDuration,
       sessionNotes: "",
       playerIds: selectedPlayerIds,
+      attendance: [],
     };
-    setSavedSessions([saved, ...savedSessions]);
+    await addSession(saved);
+    clearSession();
     setShowSaveModal(false);
     showToast(`Session saved for ${formatDate(saveDate)}`);
   };
@@ -211,6 +202,10 @@ export default function SessionBuilder() {
   const newSession = () => {
     if (session.blocks.length > 0 && !confirm("Clear current session and start new?")) return;
     clearSession();
+    // Apply user's preferred default target after clearing
+    if (settings.defaultTarget && settings.defaultTarget !== 60) {
+      setTarget(settings.defaultTarget);
+    }
   };
 
   const formatDate = (iso) =>
@@ -220,23 +215,50 @@ export default function SessionBuilder() {
     <div>
       <PageHeader
         title="Session Builder"
-        subtitle="Click a drill to preview — drag or press + to add to your session"
+        subtitle="Tap + on a drill to add it — or drag on desktop"
       >
-        <div className="flex items-center gap-2">
-          <button onClick={newSession} className="btn btn-secondary">
-            <RotateCcw size={14} /> New
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={newSession} className="btn btn-secondary" title="New session">
+            <RotateCcw size={14} /> <span className="hidden sm:inline">New</span>
           </button>
-          <button onClick={() => setShowLoadTemplate(true)} className="btn btn-secondary">
-            <FolderOpen size={14} /> Templates
+          <button onClick={() => setShowLoadTemplate(true)} className="btn btn-secondary" title="Load template">
+            <FolderOpen size={14} /> <span className="hidden sm:inline">Templates</span>
           </button>
-          <button onClick={openSaveTemplate} className="btn btn-secondary">
-            <Bookmark size={14} /> Save template
+          <button onClick={openSaveTemplate} className="btn btn-secondary" title="Save as template">
+            <Bookmark size={14} /> <span className="hidden sm:inline">Save template</span>
           </button>
           <button onClick={openSaveModal} className="btn btn-primary">
-            <Save size={14} /> Save session
+            <Save size={14} /> <span className="hidden sm:inline">Save session</span><span className="sm:hidden">Save</span>
           </button>
         </div>
       </PageHeader>
+
+      {/* Mobile-only tab switcher */}
+      <div className="lg:hidden flex bg-bg-soft border border-bg-border rounded-xl p-1 mb-3">
+        <button
+          onClick={() => setMobileTab("library")}
+          className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${
+            mobileTab === "library" ? "bg-accent text-black" : "text-white/60"
+          }`}
+        >
+          Drill Library
+        </button>
+        <button
+          onClick={() => setMobileTab("session")}
+          className={`relative flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${
+            mobileTab === "session" ? "bg-accent text-black" : "text-white/60"
+          }`}
+        >
+          Session
+          {session.blocks.length > 0 && (
+            <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${
+              mobileTab === "session" ? "bg-black/20 text-black" : "bg-accent/20 text-accent"
+            }`}>
+              {session.blocks.length}
+            </span>
+          )}
+        </button>
+      </div>
 
       <DndContext
         sensors={sensors}
@@ -246,7 +268,7 @@ export default function SessionBuilder() {
       >
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-4">
           {/* LEFT: Library */}
-          <div className="card p-4 flex flex-col max-h-[calc(100vh-180px)]">
+          <div className={`card p-3 md:p-4 flex flex-col lg:max-h-[calc(100vh-180px)] ${mobileTab === "library" ? "flex" : "hidden lg:flex"}`}>
             <div className="flex items-center gap-2 mb-3">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={14} />
@@ -268,7 +290,7 @@ export default function SessionBuilder() {
               </select>
             </div>
 
-            <div className="flex flex-wrap gap-1.5 mb-3 pb-3 border-b border-bg-border">
+            <div className="flex flex-nowrap md:flex-wrap gap-1.5 mb-3 pb-3 border-b border-bg-border overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
               <Chip active={cat === "all"} onClick={() => setCat("all")}>All ({DRILLS.length})</Chip>
               {CATEGORIES.map((c) => {
                 const count = DRILLS.filter((d) => d.cat === c.key).length;
@@ -297,7 +319,7 @@ export default function SessionBuilder() {
           </div>
 
           {/* RIGHT: Session */}
-          <div className="card p-4 flex flex-col max-h-[calc(100vh-180px)]">
+          <div className={`card p-3 md:p-4 flex flex-col lg:max-h-[calc(100vh-180px)] ${mobileTab === "session" ? "flex" : "hidden lg:flex"}`}>
             <div className="mb-3">
               <input
                 type="text"
@@ -542,7 +564,7 @@ export default function SessionBuilder() {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold">
+        <div className="fixed left-4 right-4 md:left-auto md:right-6 bottom-20 md:bottom-6 z-[45] card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold text-center md:text-left">
           {toast}
         </div>
       )}
@@ -552,12 +574,16 @@ export default function SessionBuilder() {
 
 /* --------------------------------- SHARED --------------------------------- */
 function Modal({ title, onClose, children }) {
+  useScrollLock(true);
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="card max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
+      <div
+        className="card w-full sm:max-w-md p-5 sm:p-6 rounded-t-2xl sm:rounded-xl max-h-[92vh] overflow-y-auto pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-display text-xl font-bold">{title}</h2>
-          <button onClick={onClose} className="text-white/40 hover:text-white"><X size={18} /></button>
+          <button onClick={onClose} className="p-2 -mr-2 text-white/40 hover:text-white"><X size={18} /></button>
         </div>
         {children}
       </div>
@@ -713,10 +739,11 @@ function SessionBlock({ block, index, onUpdate, onRemove }) {
 
 /* ----------------------- DRILL PREVIEW MODAL ----------------------------- */
 function DrillPreviewModal({ drill, onClose, onAdd }) {
+  useScrollLock(true);
   const info = catById(drill.cat);
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-8" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4" onClick={onClose}>
+      <div className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-white/50 mb-2">
           <span>{info?.icon}</span><span>{info?.label}</span>
         </div>

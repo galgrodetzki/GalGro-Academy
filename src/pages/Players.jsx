@@ -1,11 +1,13 @@
 import { useState } from "react";
+import { useScrollLock } from "../hooks/useScrollLock";
+import { useData } from "../context/DataContext";
+import { useAuth } from "../context/AuthContext";
 import {
   Users, Plus, X, Save, PenLine, Trash2, Eye,
   Calendar, Clock, ChevronRight, ShieldHalf, Cake,
   Ruler, Weight, StickyNote, CheckCircle2, CalendarDays,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
-import { useLocalStorage } from "../hooks/useLocalStorage";
 import { DRILLS } from "../data/drills";
 
 const drillById = (id) => DRILLS.find((d) => d.id === id);
@@ -31,50 +33,41 @@ const EMPTY_PLAYER = {
 };
 
 export default function Players() {
-  const [players, setPlayers] = useLocalStorage("galgro-players", []);
-  const [savedSessions] = useLocalStorage("galgro-sessions", []);
+  const { players, sessions: savedSessions, addPlayer, updatePlayer, removePlayer } = useData();
+  const { canEdit } = useAuth();
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_PLAYER);
-  const [viewing, setViewing] = useState(null); // player detail
+  const [viewing, setViewing] = useState(null);
   const [toast, setToast] = useState("");
 
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2500);
-  };
+  useScrollLock(!!(showForm || viewing));
 
-  const openAdd = () => {
-    setForm(EMPTY_PLAYER);
-    setEditingId(null);
-    setShowForm(true);
-  };
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
-  const openEdit = (player) => {
-    setForm({ ...player });
-    setEditingId(player.id);
-    setShowForm(true);
-  };
+  const openAdd = () => { setForm(EMPTY_PLAYER); setEditingId(null); setShowForm(true); };
 
-  const savePlayer = () => {
+  const openEdit = (player) => { setForm({ ...player }); setEditingId(player.id); setShowForm(true); };
+
+  const savePlayer = async () => {
     if (!form.name.trim()) { showToast("Player name is required"); return; }
     if (editingId) {
-      setPlayers(players.map((p) => p.id === editingId ? { ...p, ...form } : p));
+      await updatePlayer({ ...form, id: editingId });
       if (viewing?.id === editingId) setViewing({ ...viewing, ...form });
       showToast(`${form.name} updated`);
     } else {
       const newPlayer = { ...form, id: "p_" + Date.now(), joinedAt: new Date().toISOString() };
-      setPlayers([...players, newPlayer]);
+      await addPlayer(newPlayer);
       showToast(`${form.name} added to roster`);
     }
     setShowForm(false);
     setEditingId(null);
   };
 
-  const deletePlayer = (id, name) => {
+  const deletePlayer = async (id, name) => {
     if (!confirm(`Remove ${name} from the roster?`)) return;
-    setPlayers(players.filter((p) => p.id !== id));
+    await removePlayer(id);
     if (viewing?.id === id) setViewing(null);
   };
 
@@ -168,11 +161,11 @@ export default function Players() {
       {/* Add / Edit player modal */}
       {showForm && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end sm:items-center justify-center sm:p-4"
           onClick={() => setShowForm(false)}
         >
           <div
-            className="card max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto"
+            className="card w-full sm:max-w-lg p-5 sm:p-6 max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-xl pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
@@ -279,11 +272,11 @@ export default function Players() {
       {/* Player detail modal */}
       {viewing && !showForm && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setViewing(null)}
         >
           <div
-            className="card max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8"
+            className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[90vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Player header */}
@@ -362,7 +355,7 @@ export default function Players() {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold">
+        <div className="fixed left-4 right-4 md:left-auto md:right-6 bottom-20 md:bottom-6 z-[45] card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold text-center md:text-left">
           {toast}
         </div>
       )}

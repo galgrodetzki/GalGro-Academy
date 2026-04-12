@@ -5,31 +5,52 @@
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent; /* removes tap flash on mobile */
   }
+
   body {
     @apply bg-bg text-white font-sans;
     background-image:
-      radial-gradient(at 15% 10%, rgba(0, 255, 135, 0.06) 0px, transparent 50%),
-      radial-gradient(at 85% 85%, rgba(68, 136, 255, 0.05) 0px, transparent 50%);
+      /* Subtle pitch-stripe pattern — diagonal lines */
+      repeating-linear-gradient(
+        135deg,
+        transparent,
+        transparent 40px,
+        rgba(255,255,255,0.012) 40px,
+        rgba(255,255,255,0.012) 80px
+      ),
+      /* Green glow top-left — like stadium floodlights */
+      radial-gradient(ellipse at 10% 5%, rgba(0, 232, 122, 0.07) 0px, transparent 55%),
+      /* Blue tint bottom-right */
+      radial-gradient(ellipse at 90% 90%, rgba(77, 143, 255, 0.06) 0px, transparent 50%),
+      /* Mid-field center glow */
+      radial-gradient(ellipse at 50% 50%, rgba(0, 232, 122, 0.025) 0px, transparent 60%);
     background-attachment: fixed;
     margin: 0;
   }
+
   #root {
     min-height: 100vh;
   }
+
+  /* Touch-friendly tap targets */
+  button, a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #070710;
+    background: #0b0e17;
   }
   ::-webkit-scrollbar-thumb {
-    background: #252540;
+    background: #2a3048;
     border-radius: 4px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #00ff87;
+    background: #00e87a;
   }
 }
 
@@ -38,19 +59,19 @@
     @apply bg-bg-card border border-bg-border rounded-xl;
   }
   .card-hover {
-    @apply hover:border-accent/40 transition-colors;
+    @apply hover:border-accent/40 transition-colors cursor-pointer;
   }
   .btn {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all;
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all select-none;
   }
   .btn-primary {
-    @apply bg-accent text-black hover:bg-accent-dark shadow-glow;
+    @apply bg-accent text-black hover:bg-accent-dark shadow-glow active:scale-95;
   }
   .btn-secondary {
-    @apply bg-bg-card2 text-white border border-bg-border hover:border-accent hover:text-accent;
+    @apply bg-bg-card2 text-white border border-bg-border hover:border-accent hover:text-accent active:scale-95;
   }
   .btn-ghost {
-    @apply text-white/60 hover:text-white hover:bg-bg-card2;
+    @apply text-white/60 hover:text-white hover:bg-bg-card2 active:scale-95;
   }
   .tag {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide;
