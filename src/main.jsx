@@ -5,6 +5,14 @@ import App from './App.jsx'
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    let refreshing = false;
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+
     navigator.serviceWorker.register('/sw.js').then((registration) => {
       const cacheLoadedAssets = () => {
         const urls = Array.from(
@@ -14,6 +22,24 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
         registration.active?.postMessage({ type: 'CACHE_ASSETS', urls });
       };
 
+      const activateWaitingWorker = () => {
+        if (!registration.waiting) return;
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      };
+
+      registration.addEventListener('updatefound', () => {
+        const installingWorker = registration.installing;
+        if (!installingWorker) return;
+
+        installingWorker.addEventListener('statechange', () => {
+          if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            activateWaitingWorker();
+          }
+        });
+      });
+
+      activateWaitingWorker();
+      registration.update().catch(() => {});
       cacheLoadedAssets();
       navigator.serviceWorker.ready.then(cacheLoadedAssets);
     }).catch(() => {});

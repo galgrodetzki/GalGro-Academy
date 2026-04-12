@@ -1,4 +1,4 @@
-const CACHE_NAME = "galgro-academy-v1";
+const CACHE_NAME = "galgro-academy-v2";
 const STATIC_SHELL = [
   "/",
   "/manifest.webmanifest",
@@ -27,6 +27,11 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+
   if (event.data?.type !== "CACHE_ASSETS" || !Array.isArray(event.data.urls)) return;
   const sameOriginUrls = event.data.urls.filter((url) => {
     try {
