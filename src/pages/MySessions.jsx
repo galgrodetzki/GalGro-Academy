@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useScrollLock } from "../hooks/useScrollLock";
 import {
   Calendar, Clock, Trash2, Eye, Layers,
@@ -7,13 +7,11 @@ import {
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { useData } from "../context/DataContext";
-import { useAuth } from "../context/AuthContext";
 import { DRILLS, CATEGORIES } from "../data/drills";
-import { exportSessionPDF } from "../utils/exportPDF";
 
 const playerById = (players, id) => players.find((p) => p.id === id);
 
-const drillById = (id) => DRILLS.find((d) => d.id === id);
+const drillById = (drills, id) => drills.find((d) => d.id === id);
 const catById = (key) => CATEGORIES.find((c) => c.key === key);
 
 const formatDate = (iso) =>
@@ -24,12 +22,12 @@ const formatDate = (iso) =>
     : "No date set";
 
 export default function MySessions() {
-  const { sessions: savedSessions, players, updateSession: dbUpdate, removeSession: dbRemove } = useData();
-  const { canEdit } = useAuth();
+  const { sessions: savedSessions, players, customDrills, updateSession: dbUpdate, removeSession: dbRemove } = useData();
   const [viewingId, setViewingId] = useState(null);
   const [editing, setEditing] = useState(null);
   const [editData, setEditData] = useState(null);
   const [tab, setTab] = useState("upcoming");
+  const allDrills = useMemo(() => [...DRILLS, ...customDrills], [customDrills]);
 
   // Always derive from live data
   const viewing = viewingId ? savedSessions.find((s) => s.id === viewingId) ?? null : null;
@@ -58,6 +56,11 @@ export default function MySessions() {
   const markCompleted = async (id) => {
     const s = savedSessions.find((x) => x.id === id);
     if (s) await dbUpdate({ ...s, status: "completed" });
+  };
+
+  const exportPDF = async (session, options = {}) => {
+    const { exportSessionPDF } = await import("../utils/exportPDF");
+    exportSessionPDF(session, { players, drills: allDrills, categories: CATEGORIES, ...options });
   };
 
   // Open recap editor
@@ -139,6 +142,7 @@ export default function MySessions() {
               session={s}
               tab={tab}
               players={players}
+              drills={allDrills}
               onView={() => setViewingId(s.id)}
               onDelete={() => removeSession(s.id)}
               onMarkCompleted={() => markCompleted(s.id)}
@@ -215,7 +219,7 @@ export default function MySessions() {
             {/* Drill blocks */}
             <div className="space-y-2 mb-6">
               {viewing.blocks.map((b, i) => {
-                const d = drillById(b.drillId);
+                const d = drillById(allDrills, b.drillId);
                 const info = catById(d?.cat);
                 if (!d) return null;
                 const hasActual = b.actualDur !== undefined && b.actualDur !== b.dur;
@@ -257,14 +261,14 @@ export default function MySessions() {
 
             <div className="flex gap-2 flex-wrap">
               <button
-                onClick={() => exportSessionPDF(viewing, { players, drills: DRILLS, categories: CATEGORIES })}
+                onClick={() => exportPDF(viewing)}
                 className="btn btn-secondary flex-1"
                 title="Dark theme PDF"
               >
                 <FileDown size={14} /> Export PDF
               </button>
               <button
-                onClick={() => exportSessionPDF(viewing, { players, drills: DRILLS, categories: CATEGORIES, printMode: true })}
+                onClick={() => exportPDF(viewing, { printMode: true })}
                 className="btn btn-secondary flex-1"
                 title="Light background — better for printing on paper"
               >
@@ -358,7 +362,7 @@ export default function MySessions() {
             <div className="label mb-3">Drill recap</div>
             <div className="space-y-3 mb-6">
               {editData.blocks.map((b, i) => {
-                const d = drillById(b.drillId);
+                const d = drillById(allDrills, b.drillId);
                 const info = catById(d?.cat);
                 if (!d) return null;
                 return (
@@ -433,7 +437,7 @@ function TabBtn({ active, onClick, children }) {
   );
 }
 
-function SessionCard({ session: s, tab, players = [], onView, onDelete, onMarkCompleted, onRecap }) {
+function SessionCard({ session: s, tab, players = [], drills = [], onView, onDelete, onMarkCompleted, onRecap }) {
   return (
     <div className="card card-hover p-4">
       <div className="min-w-0 mb-2">
@@ -452,7 +456,7 @@ function SessionCard({ session: s, tab, players = [], onView, onDelete, onMarkCo
 
       <div className="space-y-1 my-3 min-h-[52px]">
         {s.blocks.slice(0, 3).map((b) => {
-          const d = drillById(b.drillId);
+          const d = drillById(drills, b.drillId);
           if (!d) return null;
           return (
             <div key={b.blockId} className="text-xs text-white/60 truncate">

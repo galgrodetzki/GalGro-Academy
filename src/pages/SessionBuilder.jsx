@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useScrollLock } from "../hooks/useScrollLock";
 import {
   DndContext,
@@ -39,7 +39,7 @@ import PageHeader from "../components/PageHeader";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useSession } from "../hooks/useSession";
 import { useData } from "../context/DataContext";
-import { drillById, catById, INT_COLORS } from "../utils/drillUtils";
+import { catById, INT_COLORS } from "../utils/drillUtils";
 
 const todayISO = () => new Date().toISOString().split("T")[0];
 
@@ -100,7 +100,7 @@ export default function SessionBuilder() {
       }
       return true;
     });
-  }, [search, cat, intensity]);
+  }, [allDrills, search, cat, intensity]);
 
   const totalDuration = session.blocks.reduce(
     (acc, b) => acc + (Number(b.dur) || 0) + (Number(b.rest) || 0),
@@ -147,7 +147,11 @@ export default function SessionBuilder() {
       name: templateName.trim(),
       created_at: new Date().toISOString(),
       target: session.target,
-      blocks: session.blocks.map(({ blockId: _, ...rest }) => rest),
+      blocks: session.blocks.map((block) => {
+        const rest = { ...block };
+        delete rest.blockId;
+        return rest;
+      }),
     };
     await addTemplate(tmpl);
     setShowSaveTemplate(false);
@@ -294,9 +298,9 @@ export default function SessionBuilder() {
             </div>
 
             <div className="flex flex-nowrap md:flex-wrap gap-1.5 mb-3 pb-3 border-b border-bg-border overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
-              <Chip active={cat === "all"} onClick={() => setCat("all")}>All ({DRILLS.length})</Chip>
+              <Chip active={cat === "all"} onClick={() => setCat("all")}>All ({allDrills.length})</Chip>
               {CATEGORIES.map((c) => {
-                const count = DRILLS.filter((d) => d.cat === c.key).length;
+                const count = allDrills.filter((d) => d.cat === c.key).length;
                 return (
                   <Chip key={c.key} active={cat === c.key} onClick={() => setCat(c.key)}>
                     <span className="mr-1">{c.icon}</span>{c.label}
@@ -372,6 +376,7 @@ export default function SessionBuilder() {
                         key={block.blockId}
                         block={block}
                         index={idx}
+                        drills={allDrills}
                         onUpdate={updateBlock}
                         onRemove={removeBlock}
                       />
@@ -392,7 +397,7 @@ export default function SessionBuilder() {
           )}
           {activeDrag?.type === "session-block" && (
             <div className="card p-3 shadow-glow border-accent opacity-90">
-              <div className="font-semibold text-sm">{drillById(activeDrag.block.drillId)?.name}</div>
+              <div className="font-semibold text-sm">{allDrills.find((d) => d.id === activeDrag.block.drillId)?.name}</div>
             </div>
           )}
         </DragOverlay>
@@ -662,8 +667,8 @@ function SessionDropZone({ children }) {
 }
 
 /* ---------------------------- SESSION BLOCK ------------------------------ */
-function SessionBlock({ block, index, onUpdate, onRemove }) {
-  const drill = drillById(block.drillId);
+function SessionBlock({ block, index, drills, onUpdate, onRemove }) {
+  const drill = drills.find((d) => d.id === block.drillId);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: block.blockId,
     data: { type: "session-block", block },
