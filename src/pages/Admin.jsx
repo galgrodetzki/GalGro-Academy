@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
@@ -155,7 +155,7 @@ function ReviewedCard({ proposal }) {
 }
 
 export default function Admin() {
-  const { user } = useAuth();
+  const { user, isCoach } = useAuth();
   const { proposals, pendingProposalCount, approveProposal, rejectProposal, customDrills, deleteCustomDrill } = useData();
   const [invites, setInvites]   = useState([]);
   const [profiles, setProfiles] = useState([]);
@@ -168,7 +168,13 @@ export default function Admin() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    if (!isCoach) {
+      setInvites([]);
+      setProfiles([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const [inv, prof] = await Promise.all([
       supabase.from("invites").select("*").order("created_at", { ascending: false }),
@@ -177,11 +183,12 @@ export default function Admin() {
     if (inv.data)  setInvites(inv.data);
     if (prof.data) setProfiles(prof.data);
     setLoading(false);
-  };
+  }, [isCoach]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const createInvite = async () => {
+    if (!isCoach || !user) { showToast("Only the head coach can create invites."); return; }
     const code = makeCode();
     const { data, error } = await supabase
       .from("invites")
@@ -200,6 +207,7 @@ export default function Admin() {
   };
 
   const deleteInvite = async (id) => {
+    if (!isCoach) { showToast("Only the head coach can delete invites."); return; }
     const { error } = await supabase.from("invites").delete().eq("id", id);
     if (error) {
       showToast(`Could not delete invite: ${error.message}`);
@@ -215,6 +223,7 @@ export default function Admin() {
   };
 
   const updateRole = async (profileId, newRole) => {
+    if (!isCoach) { showToast("Only the head coach can update roles."); return; }
     const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", profileId);
     if (error) {
       showToast(`Could not update role: ${error.message}`);

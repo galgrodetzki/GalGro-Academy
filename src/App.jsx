@@ -71,7 +71,7 @@ function AppInner() {
   };
 
   // Show migration banner if localStorage has data and cloud is empty
-  const showMigration = !migrated && hasLocalData() && sessions.length === 0 && players.length === 0;
+  const showMigration = canEdit && !migrated && hasLocalData() && sessions.length === 0 && players.length === 0;
 
   return (
     <div className="min-h-screen">

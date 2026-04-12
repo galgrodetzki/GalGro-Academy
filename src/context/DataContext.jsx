@@ -74,7 +74,7 @@ const toCustomDrill = (row) => ({
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const { user } = useAuth();
+  const { user, isCoach, canEdit } = useAuth();
 
   const [sessions,     setSessions]     = useState([]);
   const [players,      setPlayers]      = useState([]);
@@ -100,10 +100,14 @@ export function DataProvider({ children }) {
     const [sRes, pRes, tRes, settRes, cdRes, propRes] = await Promise.all([
       supabase.from("sessions").select("*").order("created_at", { ascending: false }),
       supabase.from("players").select("*").order("joined_at", { ascending: true }),
-      supabase.from("templates").select("*").order("created_at", { ascending: false }),
+      canEdit
+        ? supabase.from("templates").select("*").order("created_at", { ascending: false })
+        : Promise.resolve({ data: [] }),
       supabase.from("settings").select("*").eq("user_id", user.id).single(),
       supabase.from("custom_drills").select("*").order("created_at", { ascending: false }),
-      supabase.from("agent_proposals").select("*").order("created_at", { ascending: false }),
+      isCoach
+        ? supabase.from("agent_proposals").select("*").order("created_at", { ascending: false })
+        : Promise.resolve({ data: [] }),
     ]);
     if (sRes.data)    setSessions(sRes.data.map(toSession));
     if (pRes.data)    setPlayers(pRes.data.map(toPlayer));
@@ -112,12 +116,23 @@ export function DataProvider({ children }) {
     if (cdRes.data)   setCustomDrills(cdRes.data.map(toCustomDrill));
     if (propRes.data) setProposals(propRes.data);
     setDataLoading(false);
-  }, [user]);
+  }, [user, isCoach, canEdit]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  const requireUser = () =>
+    user ? null : new Error("You need to be signed in to do that.");
+
+  const requireEditor = () =>
+    requireUser() ?? (canEdit ? null : new Error("Only coaches can change sessions, players, and templates."));
+
+  const requireCoach = () =>
+    requireUser() ?? (isCoach ? null : new Error("Only the head coach can manage this."));
+
   // ── Sessions CRUD ─────────────────────────────────────────────────────────
   const addSession = async (s) => {
+    const denied = requireEditor();
+    if (denied) return denied;
     const row = { ...fromSession(s), created_by: user.id };
     const { data, error } = await supabase.from("sessions").insert(row).select().single();
     if (!error && data) setSessions((prev) => [toSession(data), ...prev]);
@@ -125,6 +140,8 @@ export function DataProvider({ children }) {
   };
 
   const updateSession = async (s) => {
+    const denied = requireEditor();
+    if (denied) return denied;
     const row = { ...fromSession(s), updated_at: new Date().toISOString() };
     const { data, error } = await supabase.from("sessions").update(row).eq("id", s.id).select().single();
     if (!error && data) setSessions((prev) => prev.map((x) => x.id === s.id ? toSession(data) : x));
@@ -132,6 +149,8 @@ export function DataProvider({ children }) {
   };
 
   const removeSession = async (id) => {
+    const denied = requireEditor();
+    if (denied) return denied;
     const { error } = await supabase.from("sessions").delete().eq("id", id);
     if (!error) setSessions((prev) => prev.filter((s) => s.id !== id));
     return error;
@@ -139,6 +158,8 @@ export function DataProvider({ children }) {
 
   // ── Players CRUD ──────────────────────────────────────────────────────────
   const addPlayer = async (p) => {
+    const denied = requireEditor();
+    if (denied) return denied;
     const row = { ...fromPlayer(p), created_by: user.id };
     const { data, error } = await supabase.from("players").insert(row).select().single();
     if (!error && data) setPlayers((prev) => [...prev, toPlayer(data)]);
@@ -146,12 +167,16 @@ export function DataProvider({ children }) {
   };
 
   const updatePlayer = async (p) => {
+    const denied = requireEditor();
+    if (denied) return denied;
     const { data, error } = await supabase.from("players").update(fromPlayer(p)).eq("id", p.id).select().single();
     if (!error && data) setPlayers((prev) => prev.map((x) => x.id === p.id ? toPlayer(data) : x));
     return error;
   };
 
   const removePlayer = async (id) => {
+    const denied = requireEditor();
+    if (denied) return denied;
     const { error } = await supabase.from("players").delete().eq("id", id);
     if (!error) setPlayers((prev) => prev.filter((p) => p.id !== id));
     return error;
@@ -159,6 +184,8 @@ export function DataProvider({ children }) {
 
   // ── Templates CRUD ────────────────────────────────────────────────────────
   const addTemplate = async (t) => {
+    const denied = requireEditor();
+    if (denied) return denied;
     const row = { ...t, created_by: user.id };
     const { data, error } = await supabase.from("templates").insert(row).select().single();
     if (!error && data) setTemplates((prev) => [data, ...prev]);
@@ -166,6 +193,8 @@ export function DataProvider({ children }) {
   };
 
   const removeTemplate = async (id) => {
+    const denied = requireEditor();
+    if (denied) return denied;
     const { error } = await supabase.from("templates").delete().eq("id", id);
     if (!error) setTemplates((prev) => prev.filter((t) => t.id !== id));
     return error;
@@ -173,6 +202,8 @@ export function DataProvider({ children }) {
 
   // ── Settings ──────────────────────────────────────────────────────────────
   const saveSettings = async (newSettings) => {
+    const denied = requireUser();
+    if (denied) return denied;
     const row = { user_id: user.id, coach_name: newSettings.coachName, default_target: newSettings.defaultTarget };
     const { error } = await supabase.from("settings").upsert(row, { onConflict: "user_id" });
     if (!error) setSettings(newSettings);
@@ -181,6 +212,8 @@ export function DataProvider({ children }) {
 
   // ── Agent proposals ───────────────────────────────────────────────────────
   const approveProposal = async (proposal) => {
+    const denied = requireCoach();
+    if (denied) return denied;
     // Insert into custom_drills
     const drillRow = {
       proposal_id:     proposal.id,
@@ -220,6 +253,8 @@ export function DataProvider({ children }) {
   };
 
   const rejectProposal = async (id) => {
+    const denied = requireCoach();
+    if (denied) return denied;
     const { error } = await supabase
       .from("agent_proposals")
       .update({ status: "rejected", reviewed_at: new Date().toISOString(), reviewed_by: user.id })
@@ -229,6 +264,8 @@ export function DataProvider({ children }) {
   };
 
   const deleteCustomDrill = async (id) => {
+    const denied = requireCoach();
+    if (denied) return denied;
     const { error } = await supabase.from("custom_drills").delete().eq("id", id);
     if (!error) setCustomDrills((prev) => prev.filter((d) => d.id !== id));
     return error;
@@ -236,6 +273,8 @@ export function DataProvider({ children }) {
 
   // ── localStorage migration ────────────────────────────────────────────────
   const migrateFromLocalStorage = async () => {
+    const denied = requireEditor();
+    if (denied) return { ok: false, error: denied.message };
     let count = 0;
     try {
       const lsSessions  = JSON.parse(localStorage.getItem("galgro-sessions")  || "[]");
