@@ -156,7 +156,7 @@ function ReviewedCard({ proposal }) {
 
 export default function Admin() {
   const { user, isCoach } = useAuth();
-  const { proposals, pendingProposalCount, approveProposal, rejectProposal, customDrills, deleteCustomDrill } = useData();
+  const { players, proposals, pendingProposalCount, approveProposal, rejectProposal, customDrills, deleteCustomDrill } = useData();
   const [invites, setInvites]   = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [role, setRole]         = useState("keeper");
@@ -263,6 +263,8 @@ export default function Admin() {
     keeper:     "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
     viewer:     "text-white/50 border-bg-border bg-bg-card2",
   };
+  const linkedPlayerForProfile = (profileId) =>
+    players.find((player) => player.profileId === profileId);
 
   const pendingProposals  = proposals.filter((p) => p.status === "pending");
   const reviewedProposals = proposals.filter((p) => p.status !== "pending");
@@ -366,34 +368,47 @@ export default function Admin() {
               <h2 className="font-display font-bold">Members ({profiles.length})</h2>
             </div>
             <div className="space-y-2">
-              {profiles.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 p-3 bg-bg-soft rounded-lg">
-                  <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-sm font-black text-accent flex-shrink-0">
-                    {p.name?.charAt(0)?.toUpperCase() ?? "?"}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold truncate">{p.name}</div>
-                    <div className="text-[11px] text-white/40">
-                      {p.id === user.id ? "You" : "Member"}
+              {profiles.map((p) => {
+                const linkedPlayer = linkedPlayerForProfile(p.id);
+                return (
+                  <div key={p.id} className="flex items-center gap-3 p-3 bg-bg-soft rounded-lg">
+                    <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-sm font-black text-accent flex-shrink-0">
+                      {p.name?.charAt(0)?.toUpperCase() ?? "?"}
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate">{p.name}</div>
+                      <div className="flex items-center gap-1.5 text-[11px] text-white/40">
+                        <span>{p.id === user.id ? "You" : "Member"}</span>
+                        {p.role === "keeper" && (
+                          <>
+                            <span>·</span>
+                            {linkedPlayer ? (
+                              <span className="text-accent/75 truncate">Linked to {linkedPlayer.name}</span>
+                            ) : (
+                              <span className="text-yellow-400/75">Not linked to roster</span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {p.id === user.id ? (
+                      <span className={`tag border text-[10px] ${ROLE_COLORS[p.role]}`}>
+                        {p.role.replace("_", " ")}
+                      </span>
+                    ) : (
+                      <select
+                        value={p.role}
+                        onChange={(e) => updateRole(p.id, e.target.value)}
+                        className="bg-bg-card border border-bg-border rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-accent"
+                      >
+                        {["assistant", "keeper", "viewer"].map((r) => (
+                          <option key={r} value={r}>{r.replace("_", " ")}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
-                  {p.id === user.id ? (
-                    <span className={`tag border text-[10px] ${ROLE_COLORS[p.role]}`}>
-                      {p.role.replace("_", " ")}
-                    </span>
-                  ) : (
-                    <select
-                      value={p.role}
-                      onChange={(e) => updateRole(p.id, e.target.value)}
-                      className="bg-bg-card border border-bg-border rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-accent"
-                    >
-                      {["assistant", "keeper", "viewer"].map((r) => (
-                        <option key={r} value={r}>{r.replace("_", " ")}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {invites.filter((i) => i.used).length > 0 && (
