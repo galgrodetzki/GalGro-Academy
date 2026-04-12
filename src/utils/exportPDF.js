@@ -109,21 +109,42 @@ export function exportSessionPDF(
   const drawPageFooter = () => {
     const pageNum = doc.internal.getCurrentPageInfo().pageNumber;
     fillRect(0, pageH - 10, pageW, 10, C.FOOTER_BG);
+    drawPdfBrandMark(margin, pageH - 8, 5);
     setFont("normal", 7, C.FOOTER_TEXT);
-    doc.text("GalGro's Academy", margin, pageH - 4);
+    doc.text("GalGro's Academy", margin + 7, pageH - 4);
     doc.text(`Page ${pageNum}`, pageW - margin, pageH - 4, { align: "right" });
+  };
+
+  const drawPdfBrandMark = (x, markY, size) => {
+    const dark = printMode ? [15, 20, 35] : [11, 14, 23];
+    const border = printMode ? [210, 215, 225] : [42, 48, 72];
+    doc.setFillColor(...dark);
+    doc.roundedRect(x, markY, size, size, 1.1, 1.1, "F");
+    doc.setDrawColor(...border);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(x, markY, size, size, 1.1, 1.1, "S");
+    doc.setFillColor(...C.ACCENT);
+    doc.roundedRect(x + size * 0.18, markY + size * 0.16, size * 0.64, size * 0.7, 0.9, 0.9, "F");
+    doc.setDrawColor(...dark);
+    doc.setLineWidth(0.45);
+    doc.rect(x + size * 0.31, markY + size * 0.36, size * 0.38, size * 0.26, "S");
+    doc.line(x + size * 0.31, markY + size * 0.45, x + size * 0.69, markY + size * 0.45);
+    doc.line(x + size * 0.5, markY + size * 0.36, x + size * 0.5, markY + size * 0.62);
+    doc.circle(x + size * 0.5, markY + size * 0.55, size * 0.08, "F");
   };
 
   // ── HEADER ────────────────────────────────────────────────────────────────
   fillRect(0, 0, pageW, 42, C.BG);
   fillRect(0, 0, 4, 42, C.ACCENT);
 
+  drawPdfBrandMark(margin + 4, 7, 11);
+
   setFont("bold", 8, C.ACCENT);
-  doc.text("GALGRO'S ACADEMY", margin + 4, 10);
+  doc.text("GALGRO'S ACADEMY", margin + 18, 10);
 
   setFont("bold", 20, C.TEXT);
   const nameLines = splitText(doc, session.name, contentW - 8);
-  doc.text(nameLines, margin + 4, 22);
+  doc.text(nameLines, margin + 18, 22);
 
   const isCompleted = session.status === "completed";
   const badgeColor = isCompleted ? C.GREEN : C.ACCENT;

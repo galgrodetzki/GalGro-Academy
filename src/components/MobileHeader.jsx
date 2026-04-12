@@ -1,5 +1,6 @@
 import { Settings, LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import BrandMark from "./BrandMark";
 
 export default function MobileHeader({ onOpenSettings }) {
   const { profile, signOut } = useAuth();
@@ -10,17 +11,7 @@ export default function MobileHeader({ onOpenSettings }) {
     <header className="md:hidden fixed top-0 left-0 right-0 z-40 bg-bg-soft/95 backdrop-blur-lg border-b border-bg-border pt-[env(safe-area-inset-top)]">
       <div className="flex items-center justify-between px-4 h-14">
         {/* Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-electric flex items-center justify-center text-base font-black text-black shadow-glow">
-            GG
-          </div>
-          <div className="leading-tight">
-            <div className="font-display text-[13px] font-bold bg-gradient-to-br from-accent to-electric bg-clip-text text-transparent">
-              GalGro's
-            </div>
-            <div className="font-display text-[13px] font-bold -mt-0.5 text-white">Academy</div>
-          </div>
-        </div>
+        <BrandMark className="gap-2.5" glyphClassName="h-9 w-9" textSize="text-[13px]" />
 
         {/* Right actions */}
         <div className="flex items-center gap-1">

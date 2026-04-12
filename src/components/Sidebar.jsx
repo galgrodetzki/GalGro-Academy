@@ -3,6 +3,7 @@ import { useLocalStorage } from "../hooks/useLocalStorage";
 import { EMPTY_SESSION } from "../hooks/useSession";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
+import BrandMark from "./BrandMark";
 
 const NAV = [
   { key: "dashboard", label: "Dashboard",       icon: LayoutDashboard },
@@ -32,19 +33,7 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
   return (
     <aside className="hidden md:flex fixed left-0 top-0 h-screen w-60 bg-bg-soft border-r border-bg-border flex-col p-4 z-40">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-3 py-4 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-electric flex items-center justify-center text-xl font-black text-black shadow-glow">
-          GG
-        </div>
-        <div>
-          <div className="font-display text-[15px] font-bold leading-tight tracking-tight bg-gradient-to-br from-accent to-electric bg-clip-text text-transparent">
-            GalGro's
-          </div>
-          <div className="font-display text-[15px] font-bold leading-tight -mt-0.5 text-white">
-            Academy
-          </div>
-        </div>
-      </div>
+      <BrandMark className="px-3 py-4 mb-6" glyphClassName="h-10 w-10" />
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1 flex-1">

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">GalGro's Academy</title>
+  <defs>
+    <linearGradient id="g" x1="112" y1="76" x2="430" y2="442" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00e87a"/>
+      <stop offset="1" stop-color="#4d8fff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="#111520"/>
+  <path d="M256 70 414 137v139c0 100.7-64 169.7-158 206.3C162 445.7 98 376.7 98 276V137L256 70Z" fill="url(#g)"/>
+  <path d="M165 196h182v125H165V196Zm0 42h182M223 196v125M289 196v125" fill="none" stroke="#0b0e17" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M190 374c25.7-30 49-45 69.8-45 20 0 42.4 15 67.2 45" fill="none" stroke="#0b0e17" stroke-width="25" stroke-linecap="round"/>
+  <circle cx="256" cy="270" r="35" fill="#0b0e17"/>
+  <circle cx="256" cy="270" r="12" fill="#00e87a"/>
+</svg>

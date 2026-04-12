@@ -12,6 +12,7 @@ Live site: https://gal-gro-academy.vercel.app
 - @dnd-kit for drag-and-drop session building
 - Supabase for auth, data, invites, profiles, RLS-backed access, and custom drills
 - jsPDF for session PDF exports
+- Manual PWA manifest + service worker for installable shell caching
 - Vercel production deploys from `main`
 
 ## Local Development
@@ -54,12 +55,23 @@ src/
     MobileHeader.jsx
     SettingsModal.jsx
     PageHeader.jsx
+    BrandMark.jsx
     CategoryIcon.jsx
   data/
     drills.js
   utils/
     drillUtils.js
     exportPDF.js
+    motion.js
+public/
+  manifest.webmanifest
+  sw.js
+  brand/
+    galgro-mark.svg
+    galgro-icon-192.png
+    galgro-icon-512.png
+    galgro-maskable-512.png
+    apple-touch-icon.png
 ```
 
 ## App Model
@@ -107,11 +119,17 @@ const allDrills = [...DRILLS, ...customDrills];
 
 Saved-session views and PDF export should always resolve drills from the merged list.
 
+## PWA And Branding
+
+The app uses a manual PWA setup because the current `vite-plugin-pwa` release does not yet declare Vite 8 peer support. PWA metadata lives in `public/manifest.webmanifest`, the runtime cache is handled by `public/sw.js`, and registration happens in `src/main.jsx`.
+
+The shared logo component is `src/components/BrandMark.jsx`. Public app icons live in `public/brand` and should stay visually aligned with the in-app mark and PDF export header.
+
 ## Product Roadmap
 
 - Motion polish: continue tuning micro-interactions after real-device testing.
-- PWA support: installable app shell, manifest, icons, and offline static shell cache.
-- Logo and branding: replace the temporary `GG` mark in Login, Sidebar, MobileHeader, and PDF export.
+- PWA support: test Add to Home Screen on iPhone and Android after each icon or cache-policy change.
+- Logo and branding: refine the mark after real-device review and apply it to future keeper-facing surfaces.
 - Keeper-facing features: personal keeper dashboard, attended-session history, attendance rate, and keeper notes.
 - Performance: split page-level chunks so the main app bundle stays lean.
 - Access hardening: keep UI role gates aligned with Supabase RLS policies.

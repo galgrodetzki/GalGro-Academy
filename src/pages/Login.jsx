@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 import { Eye, EyeOff, LogIn, UserPlus, Ticket } from "lucide-react";
+import BrandMark from "../components/BrandMark";
 
 export default function Login() {
   const [mode, setMode] = useState("signin"); // "signin" | "signup"
@@ -100,17 +101,7 @@ export default function Login() {
 
       <div className="relative w-full max-w-sm">
         {/* Logo */}
-        <div className="flex items-center gap-3 mb-8 justify-center">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-accent to-electric flex items-center justify-center text-2xl font-black text-black shadow-glow">
-            GG
-          </div>
-          <div>
-            <div className="font-display text-xl font-bold bg-gradient-to-br from-accent to-electric bg-clip-text text-transparent">
-              GalGro's
-            </div>
-            <div className="font-display text-xl font-bold -mt-1 text-white">Academy</div>
-          </div>
-        </div>
+        <BrandMark className="mb-8 justify-center" glyphClassName="h-12 w-12" textSize="text-xl" />
 
         {/* Card */}
         <div className="card p-6">

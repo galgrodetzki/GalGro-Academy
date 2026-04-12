@@ -1,0 +1,39 @@
+{
+  "name": "GalGro's Academy",
+  "short_name": "GalGro",
+  "description": "Goalkeeper coaching portal for sessions, players, drills, PDFs, and agent-proposed custom drills.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0e17",
+  "theme_color": "#111520",
+  "categories": ["sports", "productivity", "education"],
+  "icons": [
+    {
+      "src": "/brand/galgro-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/galgro-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/galgro-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/brand/galgro-mark.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
