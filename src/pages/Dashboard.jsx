@@ -1,4 +1,4 @@
-import { BookOpen, Layers, Users, Calendar, Sparkles } from "lucide-react";
+import { BookOpen, Layers, Users, Calendar, Sparkles, CheckCircle2, UserCheck } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { DRILLS, CATEGORIES } from "../data/drills";
 import { useData } from "../context/DataContext";
@@ -28,11 +28,23 @@ function StatCard({ icon: Icon, value, label, accent = "accent", gradient }) {
 }
 
 export default function Dashboard({ setPage }) {
-  const { sessions: savedSessions, players, customDrills } = useData();
+  const { sessions: savedSessions, players, customDrills, currentPlayer } = useData();
   const totalDrills = DRILLS.length + customDrills.length;
   const totalCategories = CATEGORIES.length;
-  const { profile, canEdit } = useAuth();
-  const coachName = profile?.name ?? "Coach";
+  const { profile, isKeeper, canEdit } = useAuth();
+  const memberName = profile?.name ?? "Coach";
+  const keeperSessions = currentPlayer
+    ? savedSessions.filter((s) => s.playerIds?.includes(currentPlayer.id))
+    : [];
+  const keeperUpcoming = keeperSessions.filter((s) => s.status === "planned" || !s.status);
+  const keeperCompleted = keeperSessions.filter((s) => s.status === "completed");
+  const keeperAttended = keeperCompleted.filter((s) => {
+    if (!Array.isArray(s.attendance) || s.attendance.length === 0) return true;
+    return s.attendance.includes(currentPlayer.id);
+  });
+  const attendanceRate = keeperCompleted.length
+    ? Math.round((keeperAttended.length / keeperCompleted.length) * 100)
+    : 0;
   const primaryAction = canEdit
     ? { page: "builder", label: "Start Building", icon: Layers }
     : { page: "sessions", label: "View Sessions", icon: Calendar };
@@ -41,8 +53,8 @@ export default function Dashboard({ setPage }) {
   return (
     <div>
       <PageHeader
-        title={`Welcome back, ${coachName} 🥅`}
-        subtitle="Your goalkeeping academy command center"
+        title={`Welcome back, ${memberName}`}
+        subtitle={isKeeper ? "Your goalkeeper training hub" : "Your goalkeeping academy command center"}
       />
 
       {/* Hero banner */}
@@ -54,12 +66,22 @@ export default function Dashboard({ setPage }) {
             Welcome to GalGro's Academy
           </div>
           <h2 className="font-display text-xl md:text-2xl font-bold mb-2">
-            {canEdit ? "Build your next session" : "Review your academy work"}
+            {isKeeper
+              ? currentPlayer
+                ? "Track your keeper work"
+                : "Connect your roster profile"
+              : canEdit
+                ? "Build your next session"
+                : "Review your academy work"}
           </h2>
           <p className="text-white/60 text-sm max-w-xl mb-4">
-            {canEdit
-              ? `Drag-and-drop from your library of ${totalDrills} professional drills, organized across ${totalCategories} categories.`
-              : `Browse ${totalDrills} goalkeeper drills and review your upcoming sessions.`}
+            {isKeeper
+              ? currentPlayer
+                ? `${keeperUpcoming.length} upcoming sessions, ${keeperCompleted.length} completed, and ${attendanceRate}% attendance across completed work.`
+                : "Ask your coach to match your account name to your roster profile so your sessions appear here."
+              : canEdit
+                ? `Drag-and-drop from your library of ${totalDrills} professional drills, organized across ${totalCategories} categories.`
+                : `Browse ${totalDrills} goalkeeper drills and review your upcoming sessions.`}
           </p>
           <button onClick={() => setPage(primaryAction.page)} className="btn btn-primary">
             <PrimaryIcon size={16} />
@@ -70,34 +92,69 @@ export default function Dashboard({ setPage }) {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
-        <StatCard
-          icon={BookOpen}
-          value={totalDrills}
-          label="Drills in library"
-          accent="accent"
-          gradient="linear-gradient(90deg, #00ff87, transparent)"
-        />
-        <StatCard
-          icon={Layers}
-          value={totalCategories}
-          label="Categories"
-          accent="electric"
-          gradient="linear-gradient(90deg, #4488ff, transparent)"
-        />
-        <StatCard
-          icon={Calendar}
-          value={savedSessions.length}
-          label="Saved sessions"
-          accent="orange"
-          gradient="linear-gradient(90deg, #ff6b35, transparent)"
-        />
-        <StatCard
-          icon={Users}
-          value={players.length}
-          label="Active players"
-          accent="electric-purple"
-          gradient="linear-gradient(90deg, #a855f7, transparent)"
-        />
+        {isKeeper ? (
+          <>
+            <StatCard
+              icon={Calendar}
+              value={currentPlayer ? keeperUpcoming.length : "—"}
+              label="Upcoming"
+              accent="accent"
+              gradient="linear-gradient(90deg, #00ff87, transparent)"
+            />
+            <StatCard
+              icon={CheckCircle2}
+              value={currentPlayer ? keeperCompleted.length : "—"}
+              label="Completed"
+              accent="electric"
+              gradient="linear-gradient(90deg, #4488ff, transparent)"
+            />
+            <StatCard
+              icon={UserCheck}
+              value={currentPlayer ? `${attendanceRate}%` : "—"}
+              label="Attendance"
+              accent="orange"
+              gradient="linear-gradient(90deg, #ff6b35, transparent)"
+            />
+            <StatCard
+              icon={BookOpen}
+              value={totalDrills}
+              label="Drills"
+              accent="electric-purple"
+              gradient="linear-gradient(90deg, #a855f7, transparent)"
+            />
+          </>
+        ) : (
+          <>
+            <StatCard
+              icon={BookOpen}
+              value={totalDrills}
+              label="Drills in library"
+              accent="accent"
+              gradient="linear-gradient(90deg, #00ff87, transparent)"
+            />
+            <StatCard
+              icon={Layers}
+              value={totalCategories}
+              label="Categories"
+              accent="electric"
+              gradient="linear-gradient(90deg, #4488ff, transparent)"
+            />
+            <StatCard
+              icon={Calendar}
+              value={savedSessions.length}
+              label="Saved sessions"
+              accent="orange"
+              gradient="linear-gradient(90deg, #ff6b35, transparent)"
+            />
+            <StatCard
+              icon={Users}
+              value={players.length}
+              label="Active players"
+              accent="electric-purple"
+              gradient="linear-gradient(90deg, #a855f7, transparent)"
+            />
+          </>
+        )}
       </div>
 
       {/* Quick actions grid */}

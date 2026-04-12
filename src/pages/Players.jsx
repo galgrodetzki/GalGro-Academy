@@ -31,7 +31,7 @@ const EMPTY_PLAYER = {
 };
 
 export default function Players() {
-  const { players, sessions: savedSessions, addPlayer, updatePlayer, removePlayer } = useData();
+  const { players, sessions: savedSessions, keeperNotes, addPlayer, updatePlayer, removePlayer } = useData();
   const { canEdit } = useAuth();
 
   const [showForm, setShowForm] = useState(false);
@@ -87,6 +87,8 @@ export default function Players() {
   // Sessions linked to a player
   const playerSessions = (playerId) =>
     savedSessions.filter((s) => s.playerIds?.includes(playerId));
+  const playerKeeperNotes = (playerId) =>
+    keeperNotes.filter((note) => note.playerId === playerId);
 
   return (
     <div>
@@ -366,6 +368,27 @@ export default function Players() {
               <div className="card bg-bg-soft p-4 mb-6">
                 <div className="label mb-1 flex items-center gap-1.5"><StickyNote size={12} /> Coach notes</div>
                 <p className="text-sm text-white/80 leading-relaxed">{viewing.notes}</p>
+              </div>
+            )}
+
+            {playerKeeperNotes(viewing.id).length > 0 && (
+              <div className="card bg-bg-soft p-4 mb-6">
+                <div className="label mb-3 flex items-center gap-1.5"><StickyNote size={12} /> Keeper reflections</div>
+                <div className="space-y-3">
+                  {playerKeeperNotes(viewing.id).map((note) => {
+                    const session = savedSessions.find((s) => s.id === note.sessionId);
+                    return (
+                      <div key={note.id} className="border-t border-bg-border first:border-t-0 first:pt-0 pt-3">
+                        <div className="flex items-center gap-2 text-[11px] text-white/40 mb-1">
+                          <span className="font-semibold text-accent">{session?.name ?? "Session"}</span>
+                          <span>·</span>
+                          <span>{formatDate(session?.sessionDate)}</span>
+                        </div>
+                        <p className="text-sm text-white/75 leading-relaxed">{note.note}</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

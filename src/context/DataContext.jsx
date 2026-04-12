@@ -30,6 +30,8 @@ const fromSession = (s) => ({
   attendance:     s.attendance ?? [],
 });
 
+const normalizeName = (value = "") => value.trim().toLowerCase().replace(/\s+/g, " ");
+
 const toPlayer = (row) => ({
   id:           row.id,
   name:         row.name,
@@ -40,18 +42,23 @@ const toPlayer = (row) => ({
   weight:       row.weight ?? "",
   notes:        row.notes ?? "",
   joinedAt:     row.joined_at,
+  ...("profile_id" in row ? { profileId: row.profile_id ?? "" } : {}),
 });
 
-const fromPlayer = (p) => ({
-  id:           p.id,
-  name:         p.name,
-  position:     p.position,
-  dominant_foot: p.dominantFoot,
-  age:          p.age || null,
-  height:       p.height || null,
-  weight:       p.weight || null,
-  notes:        p.notes ?? "",
-});
+const fromPlayer = (p) => {
+  const row = {
+    id:            p.id,
+    name:          p.name,
+    position:      p.position,
+    dominant_foot: p.dominantFoot,
+    age:           p.age || null,
+    height:        p.height || null,
+    weight:        p.weight || null,
+    notes:         p.notes ?? "",
+  };
+  if ("profileId" in p) row.profile_id = p.profileId || null;
+  return row;
+};
 
 // Maps a custom_drills row to the same shape as static DRILLS array entries
 const toCustomDrill = (row) => ({
@@ -71,10 +78,20 @@ const toCustomDrill = (row) => ({
   proposalId: row.proposal_id ?? null,
 });
 
+const toKeeperNote = (row) => ({
+  id:        row.id,
+  sessionId: row.session_id,
+  playerId:  row.player_id,
+  profileId: row.profile_id,
+  note:      row.note ?? "",
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const { user, isCoach, canEdit } = useAuth();
+  const { user, profile, isCoach, isKeeper, canEdit } = useAuth();
 
   const [sessions,     setSessions]     = useState([]);
   const [players,      setPlayers]      = useState([]);
@@ -82,6 +99,7 @@ export function DataProvider({ children }) {
   const [settings,     setSettings]     = useState({ coachName: "Coach", defaultTarget: 60 });
   const [customDrills, setCustomDrills] = useState([]);
   const [proposals,    setProposals]    = useState([]);
+  const [keeperNotes,  setKeeperNotes]  = useState([]);
   const [dataLoading,  setDataLoading]  = useState(true);
 
   // ── Load all data ─────────────────────────────────────────────────────────
@@ -93,11 +111,12 @@ export function DataProvider({ children }) {
       setSettings({ coachName: "Coach", defaultTarget: 60 });
       setCustomDrills([]);
       setProposals([]);
+      setKeeperNotes([]);
       setDataLoading(false);
       return;
     }
     setDataLoading(true);
-    const [sRes, pRes, tRes, settRes, cdRes, propRes] = await Promise.all([
+    const [sRes, pRes, tRes, settRes, cdRes, propRes, knRes] = await Promise.all([
       supabase.from("sessions").select("*").order("created_at", { ascending: false }),
       supabase.from("players").select("*").order("joined_at", { ascending: true }),
       canEdit
@@ -108,6 +127,7 @@ export function DataProvider({ children }) {
       isCoach
         ? supabase.from("agent_proposals").select("*").order("created_at", { ascending: false })
         : Promise.resolve({ data: [] }),
+      supabase.from("keeper_session_notes").select("*").order("updated_at", { ascending: false }),
     ]);
     if (sRes.data)    setSessions(sRes.data.map(toSession));
     if (pRes.data)    setPlayers(pRes.data.map(toPlayer));
@@ -115,6 +135,7 @@ export function DataProvider({ children }) {
     if (settRes.data) setSettings({ coachName: settRes.data.coach_name, defaultTarget: settRes.data.default_target });
     if (cdRes.data)   setCustomDrills(cdRes.data.map(toCustomDrill));
     if (propRes.data) setProposals(propRes.data);
+    if (knRes.data)   setKeeperNotes(knRes.data.map(toKeeperNote));
     setDataLoading(false);
   }, [user, isCoach, canEdit]);
 
@@ -128,6 +149,9 @@ export function DataProvider({ children }) {
 
   const requireCoach = () =>
     requireUser() ?? (isCoach ? null : new Error("Only the head coach can manage this."));
+
+  const requireKeeper = () =>
+    requireUser() ?? (isKeeper ? null : new Error("Only keepers can save keeper reflections."));
 
   // ── Sessions CRUD ─────────────────────────────────────────────────────────
   const addSession = async (s) => {
@@ -271,6 +295,50 @@ export function DataProvider({ children }) {
     return error;
   };
 
+  // ── Keeper reflections ─────────────────────────────────────────────────────
+  const saveKeeperNote = async ({ sessionId, playerId, note }) => {
+    const denied = requireKeeper();
+    if (denied) return denied;
+    const cleanNote = note.trim();
+
+    if (!cleanNote) {
+      const { error } = await supabase
+        .from("keeper_session_notes")
+        .delete()
+        .eq("session_id", sessionId)
+        .eq("profile_id", user.id);
+      if (!error) {
+        setKeeperNotes((prev) => prev.filter((n) => !(n.sessionId === sessionId && n.profileId === user.id)));
+      }
+      return error;
+    }
+
+    const row = {
+      session_id: sessionId,
+      player_id: playerId,
+      profile_id: user.id,
+      note: cleanNote,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("keeper_session_notes")
+      .upsert(row, { onConflict: "session_id,profile_id" })
+      .select()
+      .single();
+
+    if (!error && data) {
+      const mapped = toKeeperNote(data);
+      setKeeperNotes((prev) => {
+        const exists = prev.some((n) => n.id === mapped.id || (n.sessionId === mapped.sessionId && n.profileId === mapped.profileId));
+        return exists
+          ? prev.map((n) => (n.id === mapped.id || (n.sessionId === mapped.sessionId && n.profileId === mapped.profileId)) ? mapped : n)
+          : [mapped, ...prev];
+      });
+    }
+    return error;
+  };
+
   // ── localStorage migration ────────────────────────────────────────────────
   const migrateFromLocalStorage = async () => {
     const denied = requireEditor();
@@ -312,17 +380,24 @@ export function DataProvider({ children }) {
   };
 
   const pendingProposalCount = proposals.filter((p) => p.status === "pending").length;
+  const currentPlayer = user && profile?.role === "keeper"
+    ? players.find((p) => p.profileId === user.id)
+      ?? players.find((p) => normalizeName(p.name) === normalizeName(profile?.name))
+      ?? null
+    : null;
 
   return (
     <DataContext.Provider value={{
       sessions, players, templates, settings,
       customDrills, proposals, pendingProposalCount,
+      keeperNotes, currentPlayer,
       dataLoading,
       addSession, updateSession, removeSession,
       addPlayer, updatePlayer, removePlayer,
       addTemplate, removeTemplate,
       saveSettings,
       approveProposal, rejectProposal, deleteCustomDrill,
+      saveKeeperNote,
       migrateFromLocalStorage, hasLocalData,
       reload: loadAll,
     }}>

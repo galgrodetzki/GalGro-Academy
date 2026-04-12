@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useScrollLock } from "../hooks/useScrollLock";
 import {
@@ -26,30 +26,54 @@ const formatDate = (iso) =>
     : "No date set";
 
 export default function MySessions() {
-  const { sessions: savedSessions, players, customDrills, updateSession: dbUpdate, removeSession: dbRemove } = useData();
-  const { canEdit } = useAuth();
+  const {
+    sessions: savedSessions,
+    players,
+    customDrills,
+    currentPlayer,
+    keeperNotes,
+    saveKeeperNote,
+    updateSession: dbUpdate,
+    removeSession: dbRemove,
+  } = useData();
+  const { isKeeper, canEdit } = useAuth();
   const [viewingId, setViewingId] = useState(null);
   const [editing, setEditing] = useState(null);
   const [editData, setEditData] = useState(null);
   const [tab, setTab] = useState("upcoming");
   const [toast, setToast] = useState("");
+  const [keeperNoteDraft, setKeeperNoteDraft] = useState("");
+  const [savingKeeperNote, setSavingKeeperNote] = useState(false);
   const allDrills = useMemo(() => [...DRILLS, ...customDrills], [customDrills]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
   // Always derive from live data
   const viewing = viewingId ? savedSessions.find((s) => s.id === viewingId) ?? null : null;
+  const visibleSessions = isKeeper
+    ? currentPlayer
+      ? savedSessions.filter((s) => s.playerIds?.includes(currentPlayer.id))
+      : []
+    : savedSessions;
 
-  const upcoming = [...savedSessions]
+  const upcoming = [...visibleSessions]
     .filter((s) => s.status === "planned" || !s.status)
     .sort((a, b) => (a.sessionDate || "") < (b.sessionDate || "") ? -1 : 1);
 
-  const past = [...savedSessions]
+  const past = [...visibleSessions]
     .filter((s) => s.status === "completed")
     .sort((a, b) => (a.sessionDate || "") > (b.sessionDate || "") ? -1 : 1);
 
   const displayed = tab === "upcoming" ? upcoming : past;
+  const currentKeeperNote = useMemo(() => {
+    if (!viewing || !currentPlayer) return null;
+    return keeperNotes.find((note) => note.sessionId === viewing.id && note.playerId === currentPlayer.id) ?? null;
+  }, [currentPlayer, keeperNotes, viewing]);
   useScrollLock(!!(viewing || editing));
+
+  useEffect(() => {
+    setKeeperNoteDraft(currentKeeperNote?.note ?? "");
+  }, [currentKeeperNote?.note, viewingId]);
 
   const updateSession = async (updated) => {
     return dbUpdate(updated);
@@ -109,6 +133,29 @@ export default function MySessions() {
     setEditData(null);
   };
 
+  const saveKeeperReflection = async () => {
+    if (!viewing || !currentPlayer) return;
+    setSavingKeeperNote(true);
+    const error = await saveKeeperNote({
+      sessionId: viewing.id,
+      playerId: currentPlayer.id,
+      note: keeperNoteDraft,
+    });
+    setSavingKeeperNote(false);
+    if (error) {
+      showToast(`Could not save reflection: ${error.message}`);
+      return;
+    }
+    showToast(keeperNoteDraft.trim() ? "Reflection saved" : "Reflection removed");
+  };
+
+  const canSaveKeeperReflection = (session) => {
+    if (!isKeeper || !currentPlayer || session?.status !== "completed") return false;
+    if (!session.playerIds?.includes(currentPlayer.id)) return false;
+    if (!Array.isArray(session.attendance) || session.attendance.length === 0) return true;
+    return session.attendance.includes(currentPlayer.id);
+  };
+
   const updateEditBlock = (blockId, patch) => {
     setEditData((d) => ({
       ...d,
@@ -151,7 +198,9 @@ export default function MySessions() {
           </h3>
           <p className="text-sm text-white/50">
             {tab === "upcoming"
-              ? canEdit
+              ? isKeeper && !currentPlayer
+                ? "Ask your coach to connect your account to your roster profile."
+                : canEdit
                 ? "Go to Session Builder, build a session, and save it as Upcoming."
                 : "Upcoming sessions assigned to you will show up here."
               : "Sessions marked as Completed show up here."}
@@ -240,6 +289,28 @@ export default function MySessions() {
               <div className="card bg-bg-soft p-4 mb-4">
                 <div className="label mb-1">Session notes</div>
                 <p className="text-sm text-white/80 leading-relaxed">{viewing.sessionNotes}</p>
+              </div>
+            )}
+
+            {canSaveKeeperReflection(viewing) && (
+              <div className="card bg-bg-soft p-4 mb-4">
+                <div className="label mb-1">Your reflection</div>
+                <p className="text-xs text-white/40 mb-3">
+                  Add a personal note from your side of the session. Coaches can review it with your player profile.
+                </p>
+                <textarea
+                  value={keeperNoteDraft}
+                  onChange={(e) => setKeeperNoteDraft(e.target.value)}
+                  placeholder="What felt sharp? What needs work next time?"
+                  className="input min-h-[88px] resize-y text-sm"
+                />
+                <button
+                  onClick={saveKeeperReflection}
+                  disabled={savingKeeperNote}
+                  className="btn btn-primary mt-3"
+                >
+                  <Save size={14} /> {savingKeeperNote ? "Saving..." : "Save reflection"}
+                </button>
               </div>
             )}
 

@@ -74,6 +74,7 @@ public/
     apple-touch-icon.png
 supabase/
   rls_policies.sql
+  keeper_features.sql
 ```
 
 ## App Model
@@ -132,6 +133,8 @@ The shared logo component is `src/components/BrandMark.jsx`. Public app icons li
 The app-side role checks live in `AuthContext` and `DataContext`, but Supabase RLS is the real data boundary. The baseline policy script is `supabase/rls_policies.sql` and should be applied in the Supabase SQL editor for the production project.
 
 The signup flow calls the `is_first_account()` RPC from that SQL file when available, with a legacy profile-count fallback so the current live database keeps working until the policy script is applied.
+
+Keeper-facing notes use `supabase/keeper_features.sql` for the `keeper_session_notes` table and the optional `players.profile_id` roster-account link.
 
 ## Product Roadmap
 
