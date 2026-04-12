@@ -5,7 +5,7 @@ import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import {
   Users, Plus, X, Save, PenLine, Trash2, Eye,
-  Calendar, Cake, Ruler, Weight, StickyNote,
+  Calendar, Cake, Ruler, Weight, StickyNote, Link2,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { modalBackdropMotion, modalPanelMotion } from "../utils/motion";
@@ -27,12 +27,13 @@ const EMPTY_PLAYER = {
   height: "",
   weight: "",
   dominantFoot: "Right",
+  profileId: "",
   notes: "",
 };
 
 export default function Players() {
-  const { players, sessions: savedSessions, keeperNotes, addPlayer, updatePlayer, removePlayer } = useData();
-  const { canEdit } = useAuth();
+  const { players, sessions: savedSessions, keeperNotes, memberProfiles, addPlayer, updatePlayer, removePlayer } = useData();
+  const { isCoach, canEdit } = useAuth();
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -46,14 +47,14 @@ export default function Players() {
 
   const openAdd = () => {
     if (!canEdit) { showToast("Only coaches can add players."); return; }
-    setForm(EMPTY_PLAYER);
+    setForm({ ...EMPTY_PLAYER });
     setEditingId(null);
     setShowForm(true);
   };
 
   const openEdit = (player) => {
     if (!canEdit) { showToast("Only coaches can edit players."); return; }
-    setForm({ ...player });
+    setForm({ ...EMPTY_PLAYER, ...player, profileId: player.profileId ?? "" });
     setEditingId(player.id);
     setShowForm(true);
   };
@@ -89,6 +90,11 @@ export default function Players() {
     savedSessions.filter((s) => s.playerIds?.includes(playerId));
   const playerKeeperNotes = (playerId) =>
     keeperNotes.filter((note) => note.playerId === playerId);
+  const keeperProfiles = memberProfiles.filter((member) => member.role === "keeper");
+  const linkedProfileFor = (profileId) =>
+    profileId ? memberProfiles.find((member) => member.id === profileId) : null;
+  const linkedPlayerForProfile = (profileId, exceptPlayerId) =>
+    profileId ? players.find((player) => player.profileId === profileId && player.id !== exceptPlayerId) : null;
 
   return (
     <div>
@@ -135,6 +141,9 @@ export default function Players() {
                       <span className="tag bg-accent/10 text-accent border border-accent/20">{p.position}</span>
                       {p.dominantFoot && (
                         <span className="text-[11px] text-white/40">{p.dominantFoot} foot</span>
+                      )}
+                      {p.profileId && (
+                        <span className="text-[11px] text-accent/70">Account linked</span>
                       )}
                     </div>
                   </div>
@@ -275,6 +284,35 @@ export default function Players() {
                 </div>
               </div>
 
+              {isCoach && (
+                <div>
+                  <label className="label flex items-center gap-1.5"><Link2 size={12} /> Keeper account</label>
+                  <select
+                    value={form.profileId ?? ""}
+                    onChange={(e) => setForm({ ...form, profileId: e.target.value })}
+                    className="input"
+                  >
+                    <option value="">No linked account</option>
+                    {keeperProfiles.map((keeper) => {
+                      const linkedPlayer = linkedPlayerForProfile(keeper.id, editingId);
+                      return (
+                        <option key={keeper.id} value={keeper.id} disabled={!!linkedPlayer}>
+                          {keeper.name || "Unnamed keeper"}{linkedPlayer ? ` - linked to ${linkedPlayer.name}` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="text-[11px] text-white/40 mt-1.5">
+                    Link the login account that should see this player's assigned sessions.
+                  </p>
+                  {keeperProfiles.length === 0 && (
+                    <p className="text-[11px] text-electric/80 mt-1">
+                      No keeper accounts yet. Create a keeper invite from Admin first.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="label">Notes</label>
                 <textarea
@@ -323,6 +361,11 @@ export default function Players() {
                   <span className="tag bg-accent/10 text-accent border border-accent/20">{viewing.position}</span>
                   {viewing.dominantFoot && (
                     <span className="tag bg-bg-card2 border border-bg-border text-white/60">{viewing.dominantFoot} foot</span>
+                  )}
+                  {viewing.profileId && (
+                    <span className="tag bg-electric/10 border border-electric/20 text-electric">
+                      Account: {linkedProfileFor(viewing.profileId)?.name ?? "Linked"}
+                    </span>
                   )}
                   {viewing.joinedAt && (
                     <span className="text-xs text-white/40">Added {formatDate(viewing.joinedAt.split("T")[0])}</span>

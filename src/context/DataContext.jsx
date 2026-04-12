@@ -88,6 +88,13 @@ const toKeeperNote = (row) => ({
   updatedAt: row.updated_at,
 });
 
+const toProfile = (row) => ({
+  id:        row.id,
+  name:      row.name ?? "Unnamed member",
+  role:      row.role,
+  createdAt: row.created_at,
+});
+
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
@@ -100,6 +107,7 @@ export function DataProvider({ children }) {
   const [customDrills, setCustomDrills] = useState([]);
   const [proposals,    setProposals]    = useState([]);
   const [keeperNotes,  setKeeperNotes]  = useState([]);
+  const [memberProfiles, setMemberProfiles] = useState([]);
   const [dataLoading,  setDataLoading]  = useState(true);
 
   // ── Load all data ─────────────────────────────────────────────────────────
@@ -112,11 +120,12 @@ export function DataProvider({ children }) {
       setCustomDrills([]);
       setProposals([]);
       setKeeperNotes([]);
+      setMemberProfiles([]);
       setDataLoading(false);
       return;
     }
     setDataLoading(true);
-    const [sRes, pRes, tRes, settRes, cdRes, propRes, knRes] = await Promise.all([
+    const [sRes, pRes, tRes, settRes, cdRes, propRes, knRes, profRes] = await Promise.all([
       supabase.from("sessions").select("*").order("created_at", { ascending: false }),
       supabase.from("players").select("*").order("joined_at", { ascending: true }),
       canEdit
@@ -128,6 +137,9 @@ export function DataProvider({ children }) {
         ? supabase.from("agent_proposals").select("*").order("created_at", { ascending: false })
         : Promise.resolve({ data: [] }),
       supabase.from("keeper_session_notes").select("*").order("updated_at", { ascending: false }),
+      isCoach
+        ? supabase.from("profiles").select("id, name, role, created_at").order("name", { ascending: true })
+        : Promise.resolve({ data: [] }),
     ]);
     if (sRes.data)    setSessions(sRes.data.map(toSession));
     if (pRes.data)    setPlayers(pRes.data.map(toPlayer));
@@ -136,6 +148,7 @@ export function DataProvider({ children }) {
     if (cdRes.data)   setCustomDrills(cdRes.data.map(toCustomDrill));
     if (propRes.data) setProposals(propRes.data);
     if (knRes.data)   setKeeperNotes(knRes.data.map(toKeeperNote));
+    setMemberProfiles(profRes.data ? profRes.data.map(toProfile) : []);
     setDataLoading(false);
   }, [user, isCoach, canEdit]);
 
@@ -382,7 +395,7 @@ export function DataProvider({ children }) {
   const pendingProposalCount = proposals.filter((p) => p.status === "pending").length;
   const currentPlayer = user && profile?.role === "keeper"
     ? players.find((p) => p.profileId === user.id)
-      ?? players.find((p) => normalizeName(p.name) === normalizeName(profile?.name))
+      ?? players.find((p) => !p.profileId && normalizeName(p.name) === normalizeName(profile?.name))
       ?? null
     : null;
 
@@ -390,7 +403,7 @@ export function DataProvider({ children }) {
     <DataContext.Provider value={{
       sessions, players, templates, settings,
       customDrills, proposals, pendingProposalCount,
-      keeperNotes, currentPlayer,
+      keeperNotes, currentPlayer, memberProfiles,
       dataLoading,
       addSession, updateSession, removeSession,
       addPlayer, updatePlayer, removePlayer,

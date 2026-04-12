@@ -43,7 +43,10 @@ as $$
         )
         and (
           p.profile_id = auth.uid()
-          or lower(trim(p.name)) = lower(trim(pr.name))
+          or (
+            p.profile_id is null
+            and lower(trim(p.name)) = lower(trim(pr.name))
+          )
         )
     )
 $$;

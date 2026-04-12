@@ -75,6 +75,7 @@ public/
 supabase/
   rls_policies.sql
   keeper_features.sql
+  keeper_profile_linking.sql
 ```
 
 ## App Model
@@ -135,6 +136,8 @@ The app-side role checks live in `AuthContext` and `DataContext`, but Supabase R
 The signup flow calls the `is_first_account()` RPC from that SQL file when available, with a legacy profile-count fallback so the current live database keeps working until the policy script is applied.
 
 Keeper-facing notes use `supabase/keeper_features.sql` for the `keeper_session_notes` table and the optional `players.profile_id` roster-account link.
+
+If the database already ran `keeper_features.sql` before the roster-account linking UI shipped, apply `supabase/keeper_profile_linking.sql` once to tighten the keeper note name-match fallback.
 
 ## Product Roadmap
 
