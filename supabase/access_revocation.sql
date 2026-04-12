@@ -28,6 +28,45 @@ not valid;
 
 alter table public.profiles validate constraint profiles_role_check;
 
+alter table public.profiles
+add column if not exists access_expires_on date;
+
+create index if not exists profiles_access_expires_on_idx
+on public.profiles(access_expires_on)
+where access_expires_on is not null;
+
+create or replace function public.is_head_coach()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'head_coach'
+      and (p.access_expires_on is null or p.access_expires_on >= current_date)
+  )
+$$;
+
+create or replace function public.can_edit_academy()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role in ('head_coach', 'assistant')
+      and (p.access_expires_on is null or p.access_expires_on >= current_date)
+  )
+$$;
+
 create or replace function public.has_academy_access()
 returns boolean
 language sql
@@ -35,10 +74,18 @@ security definer
 set search_path = public
 stable
 as $$
-  select coalesce(public.current_profile_role() in ('head_coach', 'assistant', 'keeper', 'viewer'), false)
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role in ('head_coach', 'assistant', 'keeper', 'viewer')
+      and (p.access_expires_on is null or p.access_expires_on >= current_date)
+  )
 $$;
 
 grant execute on function public.has_academy_access() to anon, authenticated;
+grant execute on function public.is_head_coach() to authenticated;
+grant execute on function public.can_edit_academy() to authenticated;
 
 drop policy if exists "sessions_select_authenticated" on public.sessions;
 create policy "sessions_select_authenticated"

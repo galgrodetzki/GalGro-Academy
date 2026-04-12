@@ -28,14 +28,20 @@ function LoadingState({ label = "Loading academy..." }) {
   );
 }
 
-function AccessRevoked({ onSignOut }) {
+function AccessBlocked({ accessStatus, onSignOut }) {
+  const expired = accessStatus?.kind === "expired";
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12">
       <div className="card w-full max-w-md p-6 text-center">
         <BrandMark className="mb-6 justify-center" glyphClassName="h-11 w-11" textSize="text-lg" />
-        <h1 className="font-display text-2xl font-bold mb-2">Access revoked</h1>
+        <h1 className="font-display text-2xl font-bold mb-2">
+          {expired ? "Access expired" : "Access revoked"}
+        </h1>
         <p className="text-sm text-white/55 leading-relaxed mb-6">
-          This account no longer has access to GalGro's Academy. Ask the head coach if you think this should be restored.
+          {expired
+            ? "This account's access period has ended. Ask the head coach if this should be extended."
+            : "This account no longer has access to GalGro's Academy. Ask the head coach if you think this should be restored."}
         </p>
         <button onClick={onSignOut} className="btn btn-secondary w-full justify-center">
           Sign out
@@ -47,7 +53,7 @@ function AccessRevoked({ onSignOut }) {
 
 // ── Inner app (needs auth + data context) ────────────────────────────────────
 function AppInner() {
-  const { user, loading, isCoach, isRevoked, canEdit, signOut } = useAuth();
+  const { user, loading, isCoach, isAccessBlocked, accessStatus, canEdit, signOut } = useAuth();
   const { hasLocalData, migrateFromLocalStorage, sessions, players } = useData();
   const [page, setPage] = useState("dashboard");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -67,7 +73,7 @@ function AppInner() {
     </Suspense>
   );
 
-  if (isRevoked) return <AccessRevoked onSignOut={signOut} />;
+  if (isAccessBlocked) return <AccessBlocked accessStatus={accessStatus} onSignOut={signOut} />;
 
   const canAccessPage = (p) => {
     if (p === "admin") return isCoach;

@@ -93,12 +93,13 @@ const toProfile = (row) => ({
   name:      row.name ?? "Unnamed member",
   role:      row.role,
   createdAt: row.created_at,
+  accessExpiresOn: row.access_expires_on ?? "",
 });
 
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const { user, profile, isCoach, isKeeper, canEdit } = useAuth();
+  const { user, profile, isCoach, isKeeper, canEdit, isAccessBlocked } = useAuth();
 
   const [sessions,     setSessions]     = useState([]);
   const [players,      setPlayers]      = useState([]);
@@ -112,7 +113,7 @@ export function DataProvider({ children }) {
 
   // ── Load all data ─────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
-    if (!user || profile?.role === "revoked") {
+    if (!user || isAccessBlocked) {
       setSessions([]);
       setPlayers([]);
       setTemplates([]);
@@ -138,7 +139,7 @@ export function DataProvider({ children }) {
         : Promise.resolve({ data: [] }),
       supabase.from("keeper_session_notes").select("*").order("updated_at", { ascending: false }),
       isCoach
-        ? supabase.from("profiles").select("id, name, role, created_at").order("name", { ascending: true })
+        ? supabase.from("profiles").select("*").order("name", { ascending: true })
         : Promise.resolve({ data: [] }),
     ]);
     if (sRes.data)    setSessions(sRes.data.map(toSession));
@@ -150,7 +151,7 @@ export function DataProvider({ children }) {
     if (knRes.data)   setKeeperNotes(knRes.data.map(toKeeperNote));
     setMemberProfiles(profRes.data ? profRes.data.map(toProfile) : []);
     setDataLoading(false);
-  }, [user, profile?.role, isCoach, canEdit]);
+  }, [user, isCoach, canEdit, isAccessBlocked]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -164,7 +165,7 @@ export function DataProvider({ children }) {
     requireUser() ?? (isCoach ? null : new Error("Only the head coach can manage this."));
 
   const requireKeeper = () =>
-    requireUser() ?? (isKeeper ? null : new Error("Only keepers can save keeper reflections."));
+    requireUser() ?? (isKeeper && !isAccessBlocked ? null : new Error("Only keepers can save keeper reflections."));
 
   // ── Sessions CRUD ─────────────────────────────────────────────────────────
   const addSession = async (s) => {
@@ -393,7 +394,7 @@ export function DataProvider({ children }) {
   };
 
   const pendingProposalCount = proposals.filter((p) => p.status === "pending").length;
-  const currentPlayer = user && profile?.role === "keeper"
+  const currentPlayer = user && profile?.role === "keeper" && !isAccessBlocked
     ? players.find((p) => p.profileId === user.id)
       ?? players.find((p) => !p.profileId && normalizeName(p.name) === normalizeName(profile?.name))
       ?? null

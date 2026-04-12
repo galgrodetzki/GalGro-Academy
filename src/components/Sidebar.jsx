@@ -15,20 +15,23 @@ const NAV = [
 
 export default function Sidebar({ page, setPage, onOpenSettings }) {
   const [currentSession] = useLocalStorage("galgro-current-session", EMPTY_SESSION);
-  const { profile, signOut, isCoach, canEdit } = useAuth();
+  const { profile, signOut, isCoach, canEdit, accessStatus } = useAuth();
   const { pendingProposalCount } = useData();
 
   const hasSessionInProgress = (currentSession?.blocks?.length ?? 0) > 0;
 
   const name     = profile?.name ?? "Coach";
   const initials = name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").slice(0, 2).join("");
-  const roleLabel = {
+  const baseRoleLabel = {
     head_coach: "Head Coach",
     assistant:  "Assistant Coach",
     keeper:     "Goalkeeper",
     viewer:     "Viewer",
     revoked:    "Access Revoked",
   }[profile?.role] ?? "Member";
+  const roleLabel = accessStatus?.kind === "expires"
+    ? `${baseRoleLabel} · ${accessStatus.label}`
+    : baseRoleLabel;
   const navItems = canEdit ? NAV : NAV.filter(({ key }) => key !== "builder" && key !== "players");
 
   return (
@@ -110,7 +113,7 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold truncate">{name}</div>
-            <div className="text-[11px] text-white/40">{roleLabel}</div>
+            <div className="truncate text-[11px] text-white/40">{roleLabel}</div>
           </div>
         </div>
       </div>

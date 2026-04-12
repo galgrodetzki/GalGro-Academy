@@ -29,6 +29,13 @@ not valid;
 
 alter table public.profiles validate constraint profiles_role_check;
 
+alter table public.profiles
+add column if not exists access_expires_on date;
+
+create index if not exists profiles_access_expires_on_idx
+on public.profiles(access_expires_on)
+where access_expires_on is not null;
+
 -- Role helpers ---------------------------------------------------------------
 -- SECURITY DEFINER avoids recursive RLS lookups when policies need the current
 -- user's profile role.
@@ -52,7 +59,13 @@ security definer
 set search_path = public
 stable
 as $$
-  select public.current_profile_role() = 'head_coach'
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'head_coach'
+      and (p.access_expires_on is null or p.access_expires_on >= current_date)
+  )
 $$;
 
 create or replace function public.can_edit_academy()
@@ -62,7 +75,13 @@ security definer
 set search_path = public
 stable
 as $$
-  select public.current_profile_role() in ('head_coach', 'assistant')
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role in ('head_coach', 'assistant')
+      and (p.access_expires_on is null or p.access_expires_on >= current_date)
+  )
 $$;
 
 create or replace function public.has_academy_access()
@@ -72,7 +91,13 @@ security definer
 set search_path = public
 stable
 as $$
-  select coalesce(public.current_profile_role() in ('head_coach', 'assistant', 'keeper', 'viewer'), false)
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role in ('head_coach', 'assistant', 'keeper', 'viewer')
+      and (p.access_expires_on is null or p.access_expires_on >= current_date)
+  )
 $$;
 
 create or replace function public.is_first_account()
@@ -92,7 +117,8 @@ security definer
 set search_path = public
 stable
 as $$
-  select public.current_profile_role() = 'keeper'
+  select public.has_academy_access()
+    and public.current_profile_role() = 'keeper'
     and exists (
       select 1
       from public.players p
@@ -422,6 +448,6 @@ create policy "keeper_session_notes_delete_owner"
 on public.keeper_session_notes
 for delete
 to authenticated
-using (public.current_profile_role() = 'keeper' and profile_id = auth.uid());
+using (public.has_academy_access() and public.current_profile_role() = 'keeper' and profile_id = auth.uid());
 
 commit;

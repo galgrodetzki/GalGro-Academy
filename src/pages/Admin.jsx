@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import PageHeader from "../components/PageHeader";
+import { formatAccessDate, getAccessStatus, getLocalDateKey } from "../utils/access";
 import {
   Plus, Copy, Trash2, Check, Users, Shield, Key,
   Bot, Clock, CheckCircle2, XCircle, ChevronDown, ChevronUp,
@@ -20,6 +21,13 @@ const MEMBER_ROLES = [
   { value: "viewer",    label: "viewer" },
   { value: "revoked",   label: "revoked" },
 ];
+const ACCESS_STATUS_COLORS = {
+  active:  "text-accent border-accent/30 bg-accent/10",
+  expires: "text-yellow-300 border-yellow-500/30 bg-yellow-500/10",
+  expired: "text-red-300 border-red-500/30 bg-red-500/10",
+  revoked: "text-red-300 border-red-500/30 bg-red-500/10",
+  unknown: "text-white/50 border-bg-border bg-bg-card2",
+};
 
 function makeCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -236,13 +244,66 @@ export default function Admin() {
     if (newRole === "revoked" && !confirm(`Revoke access for ${member.name}? They will be blocked from the portal, but their history stays in the academy records.`)) {
       return;
     }
-    const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", profileId);
+    const patch = member.role === "revoked" && newRole !== "revoked"
+      ? { role: newRole, access_expires_on: null }
+      : { role: newRole };
+    let { error } = await supabase.from("profiles").update(patch).eq("id", profileId);
+    if (error?.message?.includes("access_expires_on")) {
+      ({ error } = await supabase.from("profiles").update({ role: newRole }).eq("id", profileId));
+    }
     if (error) {
       showToast(`Could not update role: ${error.message}`);
       return;
     }
-    setProfiles((prev) => prev.map((p) => p.id === profileId ? { ...p, role: newRole } : p));
+    setProfiles((prev) => prev.map((p) => (
+      p.id === profileId ? { ...p, ...patch } : p
+    )));
     showToast(newRole === "revoked" ? "Access revoked" : "Role updated");
+  };
+
+  const restoreAccess = async (profileId) => {
+    if (!isCoach) { showToast("Only the head coach can restore access."); return; }
+    const member = profiles.find((p) => p.id === profileId);
+    if (!member) return;
+    if (!confirm(`Restore portal access for ${member.name} as a keeper?`)) return;
+
+    let { error } = await supabase
+      .from("profiles")
+      .update({ role: "keeper", access_expires_on: null })
+      .eq("id", profileId);
+    if (error?.message?.includes("access_expires_on")) {
+      ({ error } = await supabase
+        .from("profiles")
+        .update({ role: "keeper" })
+        .eq("id", profileId));
+    }
+    if (error) {
+      showToast(`Could not restore access: ${error.message}`);
+      return;
+    }
+    setProfiles((prev) => prev.map((p) => (
+      p.id === profileId ? { ...p, role: "keeper", access_expires_on: null } : p
+    )));
+    showToast("Access restored");
+  };
+
+  const updateAccessExpiry = async (profileId, accessExpiresOn) => {
+    if (!isCoach) { showToast("Only the head coach can update access dates."); return; }
+    if (profileId === user.id) { showToast("You cannot set your own access expiry."); return; }
+
+    const value = accessExpiresOn || null;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ access_expires_on: value })
+      .eq("id", profileId);
+    if (error) {
+      showToast(`Could not update expiry: ${error.message}. Run supabase/access_expiry.sql first.`);
+      return;
+    }
+    setProfiles((prev) => prev.map((p) => (
+      p.id === profileId ? { ...p, access_expires_on: value } : p
+    )));
+    showToast(value ? `Access expires ${formatAccessDate(value)}` : "Access expiry cleared");
   };
 
   const handleApprove = async (proposal) => {
@@ -276,6 +337,7 @@ export default function Admin() {
     viewer:     "text-white/50 border-bg-border bg-bg-card2",
     revoked:    "text-red-300 border-red-500/30 bg-red-500/10",
   };
+  const today = getLocalDateKey();
   const linkedPlayerForProfile = (profileId) =>
     players.find((player) => player.profileId === profileId);
 
@@ -383,14 +445,15 @@ export default function Admin() {
             <div className="space-y-2">
               {profiles.map((p) => {
                 const linkedPlayer = linkedPlayerForProfile(p.id);
+                const accessStatus = getAccessStatus(p, today);
                 return (
-                  <div key={p.id} className="flex items-center gap-3 p-3 bg-bg-soft rounded-lg">
+                  <div key={p.id} className="flex flex-col gap-3 p-3 bg-bg-soft rounded-lg sm:flex-row sm:items-center">
                     <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-sm font-black text-accent flex-shrink-0">
                       {p.name?.charAt(0)?.toUpperCase() ?? "?"}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold truncate">{p.name}</div>
-                      <div className="flex items-center gap-1.5 text-[11px] text-white/40">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-white/40">
                         <span>{p.id === user.id ? "You" : "Member"}</span>
                         {p.role === "keeper" && (
                           <>
@@ -408,6 +471,10 @@ export default function Admin() {
                             <span className="text-red-300/80">No portal access</span>
                           </>
                         )}
+                        <span>·</span>
+                        <span className={`tag border text-[10px] ${ACCESS_STATUS_COLORS[accessStatus.kind]}`}>
+                          {accessStatus.label}
+                        </span>
                       </div>
                     </div>
                     {p.id === user.id ? (
@@ -415,26 +482,55 @@ export default function Admin() {
                         {p.role.replace("_", " ")}
                       </span>
                     ) : (
-                      <div className="flex flex-col items-end gap-2">
-                        <select
-                          value={p.role}
-                          onChange={(e) => updateRole(p.id, e.target.value)}
-                          aria-label={`Change role for ${p.name}`}
-                          className="bg-bg-card border border-bg-border rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-accent"
-                        >
-                          {MEMBER_ROLES.map((r) => (
-                            <option key={r.value} value={r.value}>{r.label}</option>
-                          ))}
-                        </select>
-                        {p.role !== "revoked" && (
-                          <button
-                            type="button"
-                            onClick={() => updateRole(p.id, "revoked")}
-                            className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-300 transition-colors hover:border-red-500/50 hover:bg-red-500/20"
+                      <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <select
+                            value={p.role}
+                            onChange={(e) => updateRole(p.id, e.target.value)}
+                            aria-label={`Change role for ${p.name}`}
+                            className="min-w-28 flex-1 rounded-lg border border-bg-border bg-bg-card px-2 py-1 text-xs text-white focus:border-accent focus:outline-none sm:flex-none"
                           >
-                            Revoke access
-                          </button>
-                        )}
+                            {MEMBER_ROLES.map((r) => (
+                              <option key={r.value} value={r.value}>{r.label}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="date"
+                            value={p.access_expires_on ?? ""}
+                            min={today}
+                            onChange={(e) => updateAccessExpiry(p.id, e.target.value)}
+                            aria-label={`Set access expiry for ${p.name}`}
+                            className="min-w-36 flex-1 rounded-lg border border-bg-border bg-bg-card px-2 py-1 text-xs text-white focus:border-accent focus:outline-none sm:flex-none"
+                          />
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {p.access_expires_on && (
+                            <button
+                              type="button"
+                              onClick={() => updateAccessExpiry(p.id, "")}
+                              className="rounded-lg border border-bg-border bg-bg-card px-2 py-1 text-[10px] font-bold text-white/50 transition-colors hover:text-white"
+                            >
+                              Clear expiry
+                            </button>
+                          )}
+                          {p.role === "revoked" ? (
+                            <button
+                              type="button"
+                              onClick={() => restoreAccess(p.id)}
+                              className="rounded-lg border border-accent/30 bg-accent/10 px-2 py-1 text-[10px] font-bold text-accent transition-colors hover:border-accent/50 hover:bg-accent/20"
+                            >
+                              Restore access
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => updateRole(p.id, "revoked")}
+                              className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-300 transition-colors hover:border-red-500/50 hover:bg-red-500/20"
+                            >
+                              Revoke access
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

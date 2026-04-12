@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { getAccessStatus, hasAccessExpired } from "../utils/access";
 
 const AuthContext = createContext(null);
 
@@ -46,10 +47,17 @@ export function AuthProvider({ children }) {
   const isKeeper    = profile?.role === "keeper";
   const isViewer    = profile?.role === "viewer";
   const isRevoked   = profile?.role === "revoked";
-  const canEdit     = isCoach || isAssistant;
+  const isAccessExpired = hasAccessExpired(profile);
+  const isAccessBlocked = isRevoked || isAccessExpired;
+  const accessStatus = getAccessStatus(profile);
+  const canEdit     = (isCoach || isAssistant) && !isAccessBlocked;
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut, fetchProfile, isCoach, isAssistant, isKeeper, isViewer, isRevoked, canEdit }}>
+    <AuthContext.Provider value={{
+      user, profile, loading, signOut, fetchProfile,
+      isCoach, isAssistant, isKeeper, isViewer, isRevoked,
+      isAccessExpired, isAccessBlocked, accessStatus, canEdit,
+    }}>
       {children}
     </AuthContext.Provider>
   );
