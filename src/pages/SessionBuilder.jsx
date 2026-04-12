@@ -69,7 +69,10 @@ export default function SessionBuilder() {
   const [saveStatus, setSaveStatus] = useState("planned");
 
   // Templates
-  const { templates, addTemplate, removeTemplate, addSession, players, settings } = useData();
+  const { templates, addTemplate, removeTemplate, addSession, players, settings, customDrills } = useData();
+
+  // Merge static + approved custom drills for the library panel
+  const allDrills = useMemo(() => [...DRILLS, ...customDrills], [customDrills]);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [showLoadTemplate, setShowLoadTemplate] = useState(false);
@@ -88,7 +91,7 @@ export default function SessionBuilder() {
   );
 
   const filtered = useMemo(() => {
-    return DRILLS.filter((d) => {
+    return allDrills.filter((d) => {
       if (cat !== "all" && d.cat !== cat) return false;
       if (intensity !== "all" && d.int !== intensity) return false;
       if (search) {

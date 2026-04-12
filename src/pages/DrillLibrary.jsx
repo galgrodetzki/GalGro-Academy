@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { Search, Clock, Zap, Package, ChevronRight } from "lucide-react";
+import { Search, Clock, Zap, Package, ChevronRight, Sparkles } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useScrollLock } from "../hooks/useScrollLock";
+import { useData } from "../context/DataContext";
 
 const INT_COLORS = {
   Low: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -12,13 +13,17 @@ const INT_COLORS = {
 };
 
 export default function DrillLibrary() {
+  const { customDrills } = useData();
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("all");
   const [intensity, setIntensity] = useState("all");
   const [selected, setSelected] = useState(null);
 
+  // Merge static + approved custom drills
+  const allDrills = useMemo(() => [...DRILLS, ...customDrills], [customDrills]);
+
   const filtered = useMemo(() => {
-    return DRILLS.filter((d) => {
+    return allDrills.filter((d) => {
       if (cat !== "all" && d.cat !== cat) return false;
       if (intensity !== "all" && d.int !== intensity) return false;
       if (search) {
@@ -30,7 +35,7 @@ export default function DrillLibrary() {
       }
       return true;
     });
-  }, [search, cat, intensity]);
+  }, [allDrills, search, cat, intensity]);
 
   const catInfo = (key) => CATEGORIES.find((c) => c.key === key);
   useScrollLock(!!selected);
@@ -39,7 +44,7 @@ export default function DrillLibrary() {
     <div>
       <PageHeader
         title="Drill Library"
-        subtitle={`${DRILLS.length} professional goalkeeping drills across ${CATEGORIES.length} categories`}
+        subtitle={`${allDrills.length} goalkeeping drills across ${CATEGORIES.length} categories${customDrills.length > 0 ? ` · ${customDrills.length} custom` : ""}`}
       />
 
       {/* Search + filters */}
@@ -77,10 +82,10 @@ export default function DrillLibrary() {
                 : "bg-bg-card2 text-white/60 hover:text-white border border-bg-border"
             }`}
           >
-            All ({DRILLS.length})
+            All ({allDrills.length})
           </button>
           {CATEGORIES.map((c) => {
-            const count = DRILLS.filter((d) => d.cat === c.key).length;
+            const count = allDrills.filter((d) => d.cat === c.key).length;
             const active = cat === c.key;
             return (
               <button
@@ -117,6 +122,11 @@ export default function DrillLibrary() {
                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-white/50">
                   <span>{info?.icon}</span>
                   <span>{info?.label}</span>
+                  {d.custom && (
+                    <span className="flex items-center gap-0.5 text-accent/80 normal-case tracking-normal">
+                      <Sparkles size={10} /> Custom
+                    </span>
+                  )}
                 </div>
                 <span className={`tag border ${INT_COLORS[d.int]}`}>{d.int}</span>
               </div>
