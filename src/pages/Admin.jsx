@@ -415,15 +415,27 @@ export default function Admin() {
                         {p.role.replace("_", " ")}
                       </span>
                     ) : (
-                      <select
-                        value={p.role}
-                        onChange={(e) => updateRole(p.id, e.target.value)}
-                        className="bg-bg-card border border-bg-border rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-accent"
-                      >
-                        {MEMBER_ROLES.map((r) => (
-                          <option key={r.value} value={r.value}>{r.label}</option>
-                        ))}
-                      </select>
+                      <div className="flex flex-col items-end gap-2">
+                        <select
+                          value={p.role}
+                          onChange={(e) => updateRole(p.id, e.target.value)}
+                          aria-label={`Change role for ${p.name}`}
+                          className="bg-bg-card border border-bg-border rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-accent"
+                        >
+                          {MEMBER_ROLES.map((r) => (
+                            <option key={r.value} value={r.value}>{r.label}</option>
+                          ))}
+                        </select>
+                        {p.role !== "revoked" && (
+                          <button
+                            type="button"
+                            onClick={() => updateRole(p.id, "revoked")}
+                            className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-300 transition-colors hover:border-red-500/50 hover:bg-red-500/20"
+                          >
+                            Revoke access
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
