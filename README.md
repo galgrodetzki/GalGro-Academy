@@ -72,6 +72,8 @@ public/
     galgro-icon-512.png
     galgro-maskable-512.png
     apple-touch-icon.png
+supabase/
+  rls_policies.sql
 ```
 
 ## App Model
@@ -124,6 +126,12 @@ Saved-session views and PDF export should always resolve drills from the merged 
 The app uses a manual PWA setup because the current `vite-plugin-pwa` release does not yet declare Vite 8 peer support. PWA metadata lives in `public/manifest.webmanifest`, the runtime cache is handled by `public/sw.js`, and registration happens in `src/main.jsx`.
 
 The shared logo component is `src/components/BrandMark.jsx`. Public app icons live in `public/brand` and should stay visually aligned with the in-app mark and PDF export header.
+
+## Supabase Security
+
+The app-side role checks live in `AuthContext` and `DataContext`, but Supabase RLS is the real data boundary. The baseline policy script is `supabase/rls_policies.sql` and should be applied in the Supabase SQL editor for the production project.
+
+The signup flow calls the `is_first_account()` RPC from that SQL file when available, with a legacy profile-count fallback so the current live database keeps working until the policy script is applied.
 
 ## Product Roadmap
 

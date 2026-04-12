@@ -14,6 +14,18 @@ export default function Login() {
   const [error, setError]       = useState("");
   const [info, setInfo]         = useState("");
 
+  const checkFirstAccount = async () => {
+    const { data: firstAccount, error: rpcErr } = await supabase.rpc("is_first_account");
+    if (!rpcErr && typeof firstAccount === "boolean") {
+      return { isFirstUser: firstAccount, error: null };
+    }
+
+    const { count, error: countErr } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true });
+    return { isFirstUser: count === 0, error: countErr };
+  };
+
   const handleSignIn = async (e) => {
     e.preventDefault();
     setLoading(true); setError("");
@@ -28,17 +40,12 @@ export default function Login() {
 
     if (!name.trim()) { setError("Please enter your name."); setLoading(false); return; }
 
-    // Check if this is the very first account (no profiles exist yet)
-    const { count, error: countErr } = await supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true });
-    if (countErr) {
+    const { isFirstUser, error: firstAccountErr } = await checkFirstAccount();
+    if (firstAccountErr) {
       setError("Could not check account access. Try again in a moment.");
       setLoading(false);
       return;
     }
-
-    const isFirstUser = count === 0;
 
     let inviteRole = "head_coach";
     let inviteId   = null;
