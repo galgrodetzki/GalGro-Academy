@@ -63,6 +63,13 @@ function getBearerToken(request) {
   return match?.[1] ?? "";
 }
 
+function getRunnerSecret(request) {
+  const customHeader = request.headers.get("x-apollo-runner-secret") ?? "";
+  if (customHeader) return customHeader;
+
+  return getBearerToken(request);
+}
+
 async function readPayload(request) {
   try {
     return await request.json();
@@ -77,7 +84,7 @@ function accessExpired(profile) {
 }
 
 async function authorizeRequest(request) {
-  const runnerSecret = request.headers.get("x-apollo-runner-secret") ?? "";
+  const runnerSecret = getRunnerSecret(request);
   if (RUNNER_SECRET && runnerSecret && constantTimeEqual(runnerSecret, RUNNER_SECRET)) {
     return {
       ok: true,
@@ -240,11 +247,11 @@ async function persistAuditRun(report, actor) {
   return { status: "recorded", runId: run.id, message: "Run and findings recorded." };
 }
 
-async function handlePost(request) {
+async function handleRun(request) {
   const auth = await authorizeRequest(request);
   if (!auth.ok) return json({ error: auth.error }, auth.status);
 
-  const payload = await readPayload(request);
+  const payload = request.method === "GET" ? {} : await readPayload(request);
   const runType = typeof payload.runType === "string" ? payload.runType : "readiness";
   if (!ALLOWED_RUN_TYPES.has(runType)) {
     return json({ error: "Apollo runner only accepts readiness checks right now." }, 400);
@@ -267,12 +274,12 @@ export default {
       return new Response(null, { status: 204, headers: JSON_HEADERS });
     }
 
-    if (request.method !== "POST") {
+    if (!["GET", "POST"].includes(request.method)) {
       return json({ error: "Method not allowed." }, 405);
     }
 
     try {
-      return await handlePost(request);
+      return await handleRun(request);
     } catch (error) {
       console.error("Apollo runner failed", error);
       return json({ error: "Apollo runner failed safely." }, 500);
