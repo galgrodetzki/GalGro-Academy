@@ -47,6 +47,7 @@ async function safeCount(supabase, tableName) {
 
 function runSecurityAgent(config) {
   const agent = DEPARTMENT_AGENT_PROFILES[0];
+  const auditWriteAvailable = config.serviceRoleConfigured || config.manualAuditAvailable;
   const findings = [
     finding({
       agent,
@@ -57,16 +58,20 @@ function runSecurityAgent(config) {
     }),
     finding({
       agent,
-      title: config.serviceRoleConfigured ? "Server audit key is present" : "Server audit key is not configured",
-      severity: config.serviceRoleConfigured ? "info" : "medium",
+      title: auditWriteAvailable ? "Audit authorization path is available" : "Audit write path is not configured",
+      severity: auditWriteAvailable ? "info" : "medium",
       category: "secrets",
       detail: config.serviceRoleConfigured
         ? "SUPABASE_SERVICE_ROLE_KEY is available only to the server runner."
-        : "Apollo cannot persist department runs until the Supabase service-role key is added in Vercel.",
+        : config.manualAuditAvailable
+          ? "Manual Apollo runs can use the current head-coach session to attempt audit writes through RLS."
+          : "Apollo cannot persist scheduled department runs until the Supabase service-role key is added in Vercel.",
       recommendation: config.serviceRoleConfigured
         ? "Use the service-role key only for narrow Apollo audit writes."
-        : "Add SUPABASE_SERVICE_ROLE_KEY only after supabase/apollo_foundation.sql has been applied.",
-      approvalRequired: !config.serviceRoleConfigured,
+        : config.manualAuditAvailable
+          ? "Keep manual audit writes behind the head-coach session until scheduled runs are approved."
+          : "Add SUPABASE_SERVICE_ROLE_KEY only after supabase/apollo_foundation.sql has been applied.",
+      approvalRequired: !auditWriteAvailable,
     }),
     finding({
       agent,
@@ -159,12 +164,16 @@ function runQaAgent(config, tableChecks) {
   if (!config.serviceRoleConfigured) {
     findings.push(finding({
       agent,
-      title: "Audit verification is blocked",
-      severity: "medium",
+      title: config.manualAuditAvailable ? "Scheduled audit verification is blocked" : "Audit verification is blocked",
+      severity: config.manualAuditAvailable ? "low" : "medium",
       category: "audit",
-      detail: "The QA agent cannot confirm persistent department-agent history until service-role audit writes are configured.",
-      recommendation: "Apply the Apollo SQL and add the Vercel service-role environment variable when we are ready to activate audit history.",
-      approvalRequired: true,
+      detail: config.manualAuditAvailable
+        ? "Manual reviews can be recorded through the head-coach session, but scheduled reviews still need a server-only service-role key."
+        : "The QA agent cannot confirm persistent department-agent history until an audit write path is configured.",
+      recommendation: config.manualAuditAvailable
+        ? "Keep scheduled heartbeat locked until the service-role key and runner secret are approved."
+        : "Apply the Apollo SQL and add the Vercel service-role environment variable when we are ready to activate audit history.",
+      approvalRequired: !config.manualAuditAvailable,
     }));
   }
 

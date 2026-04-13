@@ -90,7 +90,7 @@ export const APOLLO_FOUNDATION_STEPS = [
     step: "13B",
     title: "Server-side Runner",
     status: "Foundation",
-    detail: "Protected manual runner exists. Secrets, model access, and scheduled runs remain locked until approved.",
+    detail: "Protected manual runner exists. Manual audit can use the head-coach session; scheduled runs remain locked until approved.",
   },
   {
     step: "13C",

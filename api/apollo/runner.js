@@ -136,15 +136,17 @@ async function authorizeRequest(request) {
   };
 }
 
-function getRuntimeConfig() {
+function getRuntimeConfig(accessToken = "") {
   return {
     serviceRoleConfigured: Boolean(SERVICE_ROLE_KEY),
+    manualAuditAvailable: Boolean(accessToken),
     runnerSecretConfigured: Boolean(RUNNER_SECRET),
     modelAccessConfigured: MODEL_ACCESS_CONFIGURED,
   };
 }
 
-function buildReadinessReport(actor, runType) {
+function buildReadinessReport(actor, runType, accessToken) {
+  const runtimeConfig = getRuntimeConfig(accessToken);
   const findings = [
     {
       title: "Autonomy remains locked",
@@ -157,16 +159,22 @@ function buildReadinessReport(actor, runType) {
       agentName: "Apollo",
     },
     {
-      title: SERVICE_ROLE_KEY ? "Audit writer is configured" : "Audit writer is not configured",
-      severity: SERVICE_ROLE_KEY ? "info" : "medium",
+      title: runtimeConfig.serviceRoleConfigured || runtimeConfig.manualAuditAvailable
+        ? "Audit authorization path is available"
+        : "Audit writer is not configured",
+      severity: runtimeConfig.serviceRoleConfigured || runtimeConfig.manualAuditAvailable ? "info" : "medium",
       category: "database",
-      detail: SERVICE_ROLE_KEY
+      detail: runtimeConfig.serviceRoleConfigured
         ? "The server has a Supabase service-role key available for Apollo audit writes."
-        : "The server cannot persist Apollo runs until the service-role key is added in Vercel and the Apollo SQL has been applied.",
-      recommendation: SERVICE_ROLE_KEY
+        : runtimeConfig.manualAuditAvailable
+          ? "Manual Apollo runs can attempt audit writes through the verified head-coach session."
+          : "Scheduled Apollo runs cannot persist until the service-role key is added in Vercel and the Apollo SQL has been applied.",
+      recommendation: runtimeConfig.serviceRoleConfigured
         ? "Confirm the Apollo audit tables exist before enabling scheduled runs."
-        : "When ready, apply supabase/apollo_foundation.sql and add SUPABASE_SERVICE_ROLE_KEY as a Vercel server-only environment variable.",
-      approvalRequired: !SERVICE_ROLE_KEY,
+        : runtimeConfig.manualAuditAvailable
+          ? "Keep scheduled runs locked until the server-only service-role path is approved."
+          : "When ready, apply supabase/apollo_foundation.sql and add SUPABASE_SERVICE_ROLE_KEY as a Vercel server-only environment variable.",
+      approvalRequired: !(runtimeConfig.serviceRoleConfigured || runtimeConfig.manualAuditAvailable),
       agentKey: "apollo",
       agentName: "Apollo",
     },
@@ -221,7 +229,7 @@ async function buildDepartmentReport(actor, runType, accessToken) {
       : null;
   const departmentReview = await runDepartmentAgents({
     supabase: readClient,
-    config: getRuntimeConfig(),
+    config: getRuntimeConfig(accessToken),
   });
 
   return {
@@ -241,18 +249,23 @@ async function buildDepartmentReport(actor, runType, accessToken) {
   };
 }
 
-async function persistAuditRun(report, actor) {
-  if (!SERVICE_ROLE_KEY) {
+async function persistAuditRun(report, actor, accessToken) {
+  const auditClient = accessToken
+    ? makeSupabaseClient(SUPABASE_ANON_KEY, accessToken)
+    : SERVICE_ROLE_KEY
+      ? makeSupabaseClient(SERVICE_ROLE_KEY)
+      : null;
+
+  if (!auditClient) {
     return {
       status: "not_configured",
       runId: null,
-      message: "Audit persistence skipped; service-role key is not configured.",
+      message: "Audit persistence skipped; no head-coach session or service-role key is available.",
     };
   }
 
-  const supabase = makeSupabaseClient(SERVICE_ROLE_KEY);
   const timestamp = new Date().toISOString();
-  const { data: run, error: runError } = await supabase
+  const { data: run, error: runError } = await auditClient
     .from("apollo_agent_runs")
     .insert({
       agent_key: "apollo",
@@ -270,7 +283,7 @@ async function persistAuditRun(report, actor) {
 
   if (runError) {
     console.error("Apollo audit run write failed", runError.message);
-    return { status: "blocked", runId: null, message: "Audit tables are not ready or the service key cannot write runs." };
+    return { status: "blocked", runId: null, message: "Audit tables are not ready or this actor cannot write runs yet." };
   }
 
   const rows = report.findings.map((finding) => ({
@@ -290,7 +303,7 @@ async function persistAuditRun(report, actor) {
     },
   }));
 
-  const { error: findingsError } = await supabase.from("apollo_findings").insert(rows);
+  const { error: findingsError } = await auditClient.from("apollo_findings").insert(rows);
   if (findingsError) {
     console.error("Apollo finding write failed", findingsError.message);
     return { status: "partial", runId: run.id, message: "Run recorded, but findings could not be stored." };
@@ -311,8 +324,8 @@ async function handleRun(request) {
 
   const report = runType === "department_review"
     ? await buildDepartmentReport(auth.actor, runType, auth.accessToken)
-    : buildReadinessReport(auth.actor, runType);
-  const audit = await persistAuditRun(report, auth.actor);
+    : buildReadinessReport(auth.actor, runType, auth.accessToken);
+  const audit = await persistAuditRun(report, auth.actor, auth.accessToken);
 
   return json({
     runner: "apollo",

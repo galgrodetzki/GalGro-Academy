@@ -148,7 +148,7 @@ export default function ApolloCommandCenter({
               <h3 className="font-display font-bold">Server-side Runner</h3>
             </div>
             <p className="max-w-2xl text-sm leading-relaxed text-white/50">
-              Manual readiness and department reviews. Uses your head-coach session, keeps service keys on the server, and records audit data only when the protected database path is configured.
+              Manual readiness and department reviews. Uses your head-coach session for protected audit writes, and keeps future scheduler secrets on the server.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:min-w-[390px]">
