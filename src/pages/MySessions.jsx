@@ -26,6 +26,13 @@ const formatDate = (iso) =>
       })
     : "No date set";
 
+const formatDateTime = (iso) =>
+  iso
+    ? new Date(iso).toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+      })
+    : "";
+
 export default function MySessions() {
   const {
     sessions: savedSessions,
@@ -72,6 +79,18 @@ export default function MySessions() {
     if (!viewing || !currentPlayer) return null;
     return keeperNotes.find((note) => note.sessionId === viewing.id && note.playerId === currentPlayer.id) ?? null;
   }, [currentPlayer, keeperNotes, viewing]);
+  const keeperNoteSavedAt = currentKeeperNote?.updatedAt ?? currentKeeperNote?.createdAt ?? "";
+  const reflectionDraftIsDirty = keeperNoteDraft.trim() !== (currentKeeperNote?.note ?? "").trim();
+  const keeperReflectionActionLabel = savingKeeperNote
+    ? "Saving..."
+    : currentKeeperNote && !keeperNoteDraft.trim()
+      ? "Remove reflection"
+      : currentKeeperNote
+        ? "Update reflection"
+        : "Save reflection";
+  const viewingAttendanceRecorded = viewing
+    ? Array.isArray(viewing.attendance) && viewing.attendance.length > 0
+    : false;
   useScrollLock(!!(viewing || editing));
 
   useEffect(() => {
@@ -296,13 +315,19 @@ export default function MySessions() {
               <div className="mb-4">
                 <div className="label mb-2 flex items-center gap-1.5">
                   <Users size={11} /> Players
-                  {viewing.attendance && <span className="text-white/30 normal-case font-normal">· {viewing.attendance.length}/{viewing.playerIds.length} attended</span>}
+                  {viewing.status !== "completed" ? (
+                    <span className="text-white/30 normal-case font-normal">· {viewing.playerIds.length} assigned</span>
+                  ) : viewingAttendanceRecorded ? (
+                    <span className="text-white/30 normal-case font-normal">· {viewing.attendance.length}/{viewing.playerIds.length} attended</span>
+                  ) : (
+                    <span className="text-white/30 normal-case font-normal">· attendance not recorded</span>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {viewing.playerIds.map((pid) => {
                     const p = playerById(players, pid);
                     if (!p) return null;
-                    const attended = !viewing.attendance || viewing.attendance.includes(pid);
+                    const attended = !viewingAttendanceRecorded || viewing.attendance.includes(pid);
                     return (
                       <span key={pid} className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border text-sm font-semibold ${
                         attended
@@ -311,7 +336,7 @@ export default function MySessions() {
                       }`}>
                         <span className="w-5 h-5 rounded-md bg-current/10 flex items-center justify-center text-[11px] font-black">{p.name.charAt(0)}</span>
                         {p.name}
-                        {viewing.attendance && (attended ? <CheckCircle2 size={11} /> : <X size={11} />)}
+                        {viewingAttendanceRecorded && (attended ? <CheckCircle2 size={11} /> : <X size={11} />)}
                       </span>
                     );
                   })}
@@ -329,7 +354,14 @@ export default function MySessions() {
 
             {canSaveKeeperReflection(viewing) && (
               <div className="card bg-bg-soft p-4 mb-4">
-                <div className="label mb-1">Your reflection</div>
+                <div className="label mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <span>Your reflection</span>
+                  {keeperNoteSavedAt && (
+                    <span className="normal-case tracking-normal text-white/35">
+                      Saved {formatDateTime(keeperNoteSavedAt)}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-white/40 mb-3">
                   Add a personal note from your side of the session. Coaches can review it with your player profile.
                 </p>
@@ -338,13 +370,18 @@ export default function MySessions() {
                   onChange={(e) => setKeeperNoteDraft(e.target.value)}
                   placeholder="What felt sharp? What needs work next time?"
                   className="input min-h-[88px] resize-y text-sm"
+                  aria-label="Your reflection"
                 />
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/35">
+                  <span>{keeperNoteDraft.trim().length} characters</span>
+                  {reflectionDraftIsDirty && <span className="text-accent/80">Unsaved changes</span>}
+                </div>
                 <button
                   onClick={saveKeeperReflection}
-                  disabled={savingKeeperNote}
+                  disabled={savingKeeperNote || !reflectionDraftIsDirty}
                   className="btn btn-primary mt-3"
                 >
-                  <Save size={14} /> {savingKeeperNote ? "Saving..." : "Save reflection"}
+                  <Save size={14} /> {keeperReflectionActionLabel}
                 </button>
               </div>
             )}

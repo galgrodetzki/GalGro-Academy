@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   Users, Plus, X, Save, PenLine, Trash2, Eye,
   Calendar, Cake, Ruler, Weight, StickyNote, Link2,
-  CheckCircle2, Clock3, MessageSquareText, UserCheck,
+  CheckCircle2, Clock3, MessageSquareText, UserCheck, AlertCircle,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { modalBackdropMotion, modalPanelMotion } from "../utils/motion";
@@ -14,6 +14,13 @@ import { modalBackdropMotion, modalPanelMotion } from "../utils/motion";
 const formatDate = (iso) =>
   iso
     ? new Date(iso + "T12:00:00").toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+      })
+    : "—";
+
+const formatDateTime = (iso) =>
+  iso
+    ? new Date(iso).toLocaleDateString("en-US", {
         month: "short", day: "numeric", year: "numeric",
       })
     : "—";
@@ -34,6 +41,8 @@ const EMPTY_PLAYER = {
 
 const byNewestSession = (a, b) => (a.sessionDate || "") > (b.sessionDate || "") ? -1 : 1;
 const byOldestSession = (a, b) => (a.sessionDate || "") > (b.sessionDate || "") ? 1 : -1;
+const hasRecordedAttendance = (session) => Array.isArray(session.attendance) && session.attendance.length > 0;
+const attendedSession = (session, playerId) => !hasRecordedAttendance(session) || session.attendance.includes(playerId);
 
 function buildKeeperProfile(player, sessions, keeperNotes) {
   const assigned = sessions
@@ -50,6 +59,10 @@ function buildKeeperProfile(player, sessions, keeperNotes) {
   const reflections = keeperNotes
     .filter((note) => note.playerId === player.id)
     .sort((a, b) => (a.updatedAt || a.createdAt || "") > (b.updatedAt || b.createdAt || "") ? -1 : 1);
+  const reflectedSessionIds = new Set(reflections.map((note) => note.sessionId));
+  const missingReflections = completed
+    .filter((s) => attendedSession(s, player.id) && !reflectedSessionIds.has(s.id))
+    .sort(byNewestSession);
 
   return {
     assigned,
@@ -58,6 +71,7 @@ function buildKeeperProfile(player, sessions, keeperNotes) {
     attended,
     attendanceTracked,
     reflections,
+    missingReflections,
     attendanceRate: attendanceTracked.length
       ? Math.round((attended.length / attendanceTracked.length) * 100)
       : null,
@@ -77,9 +91,13 @@ export default function Players() {
   const [toast, setToast] = useState("");
 
   useScrollLock(!!(showForm || viewing));
+  const keeperProfileByPlayerId = useMemo(
+    () => new Map(players.map((player) => [player.id, buildKeeperProfile(player, savedSessions, keeperNotes)])),
+    [keeperNotes, players, savedSessions],
+  );
   const viewingProfile = useMemo(
-    () => viewing ? buildKeeperProfile(viewing, savedSessions, keeperNotes) : null,
-    [keeperNotes, savedSessions, viewing],
+    () => viewing ? keeperProfileByPlayerId.get(viewing.id) ?? buildKeeperProfile(viewing, savedSessions, keeperNotes) : null,
+    [keeperNotes, keeperProfileByPlayerId, savedSessions, viewing],
   );
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
@@ -164,6 +182,7 @@ export default function Players() {
             const sessions = playerSessions(p.id);
             const completed = sessions.filter((s) => s.status === "completed").length;
             const upcoming = sessions.filter((s) => s.status === "planned" || !s.status).length;
+            const profileSummary = keeperProfileByPlayerId.get(p.id) ?? buildKeeperProfile(p, savedSessions, keeperNotes);
             return (
               <div key={p.id} className="card card-hover p-4">
                 {/* Header */}
@@ -198,6 +217,13 @@ export default function Players() {
                 {/* Notes preview */}
                 {p.notes && (
                   <p className="text-xs text-white/50 line-clamp-2 mb-3 italic">{p.notes}</p>
+                )}
+
+                {profileSummary.missingReflections.length > 0 && (
+                  <div className="mb-3 flex items-center gap-1.5 rounded-lg border border-orange/20 bg-orange/10 px-3 py-2 text-[11px] font-semibold text-orange">
+                    <AlertCircle size={12} />
+                    {profileSummary.missingReflections.length} reflection{profileSummary.missingReflections.length === 1 ? "" : "s"} pending
+                  </div>
                 )}
 
                 <div className="flex items-center gap-2 pt-3 border-t border-bg-border">
@@ -426,7 +452,12 @@ export default function Players() {
               />
               <ProfileMetric label="Completed" value={viewingProfile.completed.length} hint="Sessions" />
               <ProfileMetric label="Upcoming" value={viewingProfile.upcoming.length} hint="Assigned" />
-              <ProfileMetric label="Reflections" value={viewingProfile.reflections.length} hint="Keeper notes" accent={viewingProfile.reflections.length > 0} />
+              <ProfileMetric
+                label="Reflections"
+                value={viewingProfile.reflections.length}
+                hint={viewingProfile.missingReflections.length ? `${viewingProfile.missingReflections.length} pending` : "Up to date"}
+                accent={viewingProfile.reflections.length > 0}
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
@@ -496,11 +527,42 @@ export default function Players() {
                           <span className="font-semibold text-accent">{session?.name ?? "Session"}</span>
                           <span>·</span>
                           <span>{formatDate(session?.sessionDate)}</span>
+                          <span>·</span>
+                          <span>Updated {formatDateTime(note.updatedAt ?? note.createdAt)}</span>
                         </div>
                         <p className="text-sm text-white/75 leading-relaxed">{note.note}</p>
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {viewingProfile.missingReflections.length > 0 && (
+              <div className="rounded-lg border border-orange/20 bg-orange/10 p-4 mb-6">
+                <div className="label mb-2 flex items-center gap-1.5 text-orange">
+                  <AlertCircle size={12} /> Reflection follow-up
+                </div>
+                <p className="mb-3 text-xs text-white/50">
+                  Completed attended sessions without a keeper reflection yet.
+                </p>
+                <div className="space-y-2">
+                  {viewingProfile.missingReflections.slice(0, 4).map((session) => (
+                    <div key={session.id} className="flex items-center justify-between gap-3 rounded-lg border border-orange/15 bg-bg-soft/70 px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold">{session.name}</div>
+                        <div className="text-[11px] text-white/40">{formatDate(session.sessionDate)}</div>
+                      </div>
+                      <span className="tag shrink-0 border border-orange/20 bg-orange/10 text-orange normal-case tracking-normal">
+                        Missing
+                      </span>
+                    </div>
+                  ))}
+                  {viewingProfile.missingReflections.length > 4 && (
+                    <div className="text-[11px] text-white/40">
+                      +{viewingProfile.missingReflections.length - 4} more session{viewingProfile.missingReflections.length - 4 === 1 ? "" : "s"}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -511,6 +573,7 @@ export default function Players() {
               <PlayerSessionList
                 sessions={viewingProfile.assigned}
                 playerId={viewing.id}
+                keeperNotes={keeperNotes}
               />
             </div>
 
@@ -565,7 +628,7 @@ function ProfileBodyStat({ icon: Icon, label, value }) {
   );
 }
 
-function PlayerSessionList({ sessions, playerId }) {
+function PlayerSessionList({ sessions, playerId, keeperNotes = [] }) {
   const assigned = sessions
     .filter((s) => s.playerIds?.includes(playerId))
     .sort((a, b) => (a.sessionDate || "") > (b.sessionDate || "") ? -1 : 1);
@@ -588,8 +651,9 @@ function PlayerSessionList({ sessions, playerId }) {
         <StatPill label="Completed" value={completed.length} accent />
       </div>
       {assigned.map((s) => {
-        const attendanceRecorded = Array.isArray(s.attendance) && s.attendance.length > 0;
-        const attended = attendanceRecorded && s.attendance.includes(playerId);
+        const attendanceRecorded = hasRecordedAttendance(s);
+        const attended = attendedSession(s, playerId);
+        const reflected = keeperNotes.some((note) => note.sessionId === s.id && note.playerId === playerId);
 
         return (
           <div key={s.id} className="rounded-lg border border-bg-border bg-bg-soft p-3">
@@ -607,6 +671,11 @@ function PlayerSessionList({ sessions, playerId }) {
               {s.status === "completed" && attendanceRecorded && (
                 <span className={`flex items-center gap-1 ${attended ? "text-accent/80" : "text-red-300/75"}`}>
                   <UserCheck size={10} /> {attended ? "Attended" : "Absent"}
+                </span>
+              )}
+              {s.status === "completed" && attended && (
+                <span className={`flex items-center gap-1 ${reflected ? "text-accent/80" : "text-orange/80"}`}>
+                  <MessageSquareText size={10} /> {reflected ? "Reflection saved" : "Reflection missing"}
                 </span>
               )}
             </div>
