@@ -194,7 +194,7 @@ async function buildApolloReply({ message, context, actor }) {
       mode: "grounded_fallback",
       model: APOLLO_MODEL,
       reply: fallback,
-      modelStatus: "Model call failed safely, so Apollo answered from deterministic audit context.",
+      modelStatus: "Model call failed safely, so Apollo answered from deterministic context packs.",
     };
   }
 }

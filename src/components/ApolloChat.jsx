@@ -145,7 +145,7 @@ export default function ApolloChat({ onAuditRecorded }) {
           {status === "loading" && (
             <div className="flex justify-start">
               <div className="rounded-lg border border-bg-border bg-bg-soft px-4 py-3 text-sm text-white/45">
-                Apollo is reading the audit context...
+                Apollo is reading the context packs...
               </div>
             </div>
           )}
