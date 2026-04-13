@@ -15,7 +15,7 @@ import {
   APOLLO_FOUNDATION_STEPS,
   APOLLO_PRINCIPLES,
 } from "../data/apollo";
-import { runApolloReadinessCheck } from "../lib/apolloRunner";
+import { runApolloDepartmentReview, runApolloReadinessCheck } from "../lib/apolloRunner";
 
 const statusStyles = {
   Complete: "border-accent/30 bg-accent/10 text-accent",
@@ -67,17 +67,20 @@ export default function ApolloCommandCenter({
     error: "",
   });
   const findings = runnerState.result?.report?.findings ?? [];
-  const runCheck = async () => {
-    setRunnerState({ status: "loading", result: null, error: "" });
+  const runCheck = async (checkType) => {
+    setRunnerState({ status: "loading", result: null, error: "", checkType });
 
     try {
-      const result = await runApolloReadinessCheck();
-      setRunnerState({ status: "success", result, error: "" });
+      const result = checkType === "departments"
+        ? await runApolloDepartmentReview()
+        : await runApolloReadinessCheck();
+      setRunnerState({ status: "success", result, error: "", checkType });
     } catch (error) {
       setRunnerState({
         status: "error",
         result: null,
         error: error instanceof Error ? error.message : "Apollo runner could not complete.",
+        checkType,
       });
     }
   };
@@ -145,17 +148,27 @@ export default function ApolloCommandCenter({
               <h3 className="font-display font-bold">Server-side Runner</h3>
             </div>
             <p className="max-w-2xl text-sm leading-relaxed text-white/50">
-              Manual readiness check. Uses your head-coach session, keeps service keys on the server, and records audit data only when the protected database path is configured.
+              Manual readiness and department reviews. Uses your head-coach session, keeps service keys on the server, and records audit data only when the protected database path is configured.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={runCheck}
-            disabled={runnerState.status === "loading"}
-            className="btn btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {runnerState.status === "loading" ? "Checking..." : "Run readiness check"}
-          </button>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:min-w-[390px]">
+            <button
+              type="button"
+              onClick={() => runCheck("readiness")}
+              disabled={runnerState.status === "loading"}
+              className="btn btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {runnerState.status === "loading" && runnerState.checkType === "readiness" ? "Checking..." : "Run readiness check"}
+            </button>
+            <button
+              type="button"
+              onClick={() => runCheck("departments")}
+              disabled={runnerState.status === "loading"}
+              className="btn btn-secondary justify-center disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {runnerState.status === "loading" && runnerState.checkType === "departments" ? "Reviewing..." : "Run department review"}
+            </button>
+          </div>
         </div>
 
         {runnerState.error && (
@@ -183,9 +196,14 @@ export default function ApolloCommandCenter({
 
             <div className="space-y-2">
               {findings.map((finding) => (
-                <div key={finding.title} className="rounded-lg border border-bg-border bg-bg-soft p-3">
+                <div key={`${finding.agentKey ?? "apollo"}-${finding.title}`} className="rounded-lg border border-bg-border bg-bg-soft p-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="text-sm font-bold text-white/85">{finding.title}</div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+                        {finding.agentName ?? "Apollo"}
+                      </div>
+                      <div className="mt-1 text-sm font-bold text-white/85">{finding.title}</div>
+                    </div>
                     <span className={`tag border shrink-0 normal-case tracking-normal ${severityStyles[finding.severity] ?? severityStyles.info}`}>
                       {finding.severity}
                     </span>

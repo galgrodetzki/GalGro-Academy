@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { runDepartmentAgents } from "./departmentAgents.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL
   ?? process.env.VITE_SUPABASE_URL
@@ -13,7 +14,7 @@ const RUNNER_SECRET = process.env.APOLLO_RUNNER_SECRET ?? process.env.CRON_SECRE
 const MODEL_ACCESS_CONFIGURED = Boolean(
   process.env.APOLLO_MODEL || process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY
 );
-const ALLOWED_RUN_TYPES = new Set(["readiness"]);
+const ALLOWED_RUN_TYPES = new Set(["readiness", "department_review"]);
 
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -94,6 +95,7 @@ async function authorizeRequest(request) {
         role: "system",
         source: "runner_secret",
       },
+      accessToken: "",
     };
   }
 
@@ -130,6 +132,15 @@ async function authorizeRequest(request) {
       role: profile.role,
       source: "supabase_session",
     },
+    accessToken,
+  };
+}
+
+function getRuntimeConfig() {
+  return {
+    serviceRoleConfigured: Boolean(SERVICE_ROLE_KEY),
+    runnerSecretConfigured: Boolean(RUNNER_SECRET),
+    modelAccessConfigured: MODEL_ACCESS_CONFIGURED,
   };
 }
 
@@ -142,6 +153,8 @@ function buildReadinessReport(actor, runType) {
       detail: "Apollo can run this manual readiness check, but cannot deploy, migrate, change access, or call external tools from here.",
       recommendation: "Keep this gate until department agents have isolated scopes and explicit approval rules.",
       approvalRequired: false,
+      agentKey: "apollo",
+      agentName: "Apollo",
     },
     {
       title: SERVICE_ROLE_KEY ? "Audit writer is configured" : "Audit writer is not configured",
@@ -154,6 +167,8 @@ function buildReadinessReport(actor, runType) {
         ? "Confirm the Apollo audit tables exist before enabling scheduled runs."
         : "When ready, apply supabase/apollo_foundation.sql and add SUPABASE_SERVICE_ROLE_KEY as a Vercel server-only environment variable.",
       approvalRequired: !SERVICE_ROLE_KEY,
+      agentKey: "apollo",
+      agentName: "Apollo",
     },
     {
       title: RUNNER_SECRET ? "Scheduler secret is configured" : "Scheduler secret is not configured",
@@ -166,6 +181,8 @@ function buildReadinessReport(actor, runType) {
         ? "Use the runner secret only for read-only scheduled checks until Apollo approvals are built."
         : "Add APOLLO_RUNNER_SECRET or CRON_SECRET before wiring Vercel Cron or other server-to-server triggers.",
       approvalRequired: !RUNNER_SECRET,
+      agentKey: "apollo",
+      agentName: "Apollo",
     },
     {
       title: MODEL_ACCESS_CONFIGURED ? "Model access is configured" : "Model access remains locked",
@@ -176,6 +193,8 @@ function buildReadinessReport(actor, runType) {
         : "Apollo has no model access from this endpoint yet.",
       recommendation: "Add model calls only after the audit tables and approval queue are working.",
       approvalRequired: true,
+      agentKey: "apollo",
+      agentName: "Apollo",
     },
   ];
 
@@ -191,6 +210,34 @@ function buildReadinessReport(actor, runType) {
       "No scheduled background loop",
     ],
     findings,
+  };
+}
+
+async function buildDepartmentReport(actor, runType, accessToken) {
+  const readClient = accessToken
+    ? makeSupabaseClient(SUPABASE_ANON_KEY, accessToken)
+    : SERVICE_ROLE_KEY
+      ? makeSupabaseClient(SERVICE_ROLE_KEY)
+      : null;
+  const departmentReview = await runDepartmentAgents({
+    supabase: readClient,
+    config: getRuntimeConfig(),
+  });
+
+  return {
+    summary: "Apollo department agents completed a read-only review.",
+    actor,
+    runType,
+    mode: "read_only",
+    gates: [
+      "No autonomous production changes",
+      "No external tool calls",
+      "No browser-exposed service secrets",
+      "Department findings only",
+    ],
+    agents: departmentReview.agents,
+    tableChecks: departmentReview.tableChecks,
+    findings: departmentReview.findings,
   };
 }
 
@@ -228,14 +275,19 @@ async function persistAuditRun(report, actor) {
 
   const rows = report.findings.map((finding) => ({
     run_id: run.id,
-    agent_key: "apollo",
+    agent_key: finding.agentKey ?? "apollo",
     title: finding.title,
     severity: finding.severity,
     category: finding.category,
     finding: finding.detail,
     recommendation: finding.recommendation,
     approval_required: finding.approvalRequired,
-    metadata: { source: "apollo_runner", actorSource: actor.source, runType: report.runType },
+    metadata: {
+      source: "apollo_runner",
+      actorSource: actor.source,
+      runType: report.runType,
+      agentName: finding.agentName ?? "Apollo",
+    },
   }));
 
   const { error: findingsError } = await supabase.from("apollo_findings").insert(rows);
@@ -254,10 +306,12 @@ async function handleRun(request) {
   const payload = request.method === "GET" ? {} : await readPayload(request);
   const runType = typeof payload.runType === "string" ? payload.runType : "readiness";
   if (!ALLOWED_RUN_TYPES.has(runType)) {
-    return json({ error: "Apollo runner only accepts readiness checks right now." }, 400);
+    return json({ error: "Apollo runner only accepts approved read-only checks right now." }, 400);
   }
 
-  const report = buildReadinessReport(auth.actor, runType);
+  const report = runType === "department_review"
+    ? await buildDepartmentReport(auth.actor, runType, auth.accessToken)
+    : buildReadinessReport(auth.actor, runType);
   const audit = await persistAuditRun(report, auth.actor);
 
   return json({

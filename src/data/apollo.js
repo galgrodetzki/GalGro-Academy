@@ -32,7 +32,7 @@ export const APOLLO_DEPARTMENTS = [
   },
   {
     name: "QA Lead",
-    status: "Planned",
+    status: "Foundation",
     scope: "Checks builds, UI regressions, mobile layout, console errors, and critical flows.",
     reports: "Turns failures into clear reproduction notes and suggested fixes.",
   },
@@ -95,13 +95,13 @@ export const APOLLO_FOUNDATION_STEPS = [
   {
     step: "13C",
     title: "Department Agents",
-    status: "Next",
-    detail: "Security, Cyber, QA, Performance, Product, and Drill Scout reporting to Apollo.",
+    status: "Foundation",
+    detail: "Security, Cyber, and QA now report through Apollo in read-only mode.",
   },
   {
     step: "13D",
     title: "Background Heartbeat",
-    status: "Queued",
+    status: "Next",
     detail: "Scheduled and event-triggered runs with cost, frequency, and scope controls.",
   },
 ];

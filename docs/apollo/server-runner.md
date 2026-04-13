@@ -5,6 +5,7 @@ The runner is the protected server layer for Apollo. It is intentionally limited
 ## Current capability
 
 - Manual readiness check from the Admin Apollo tab.
+- Manual read-only department review from the Admin Apollo tab.
 - Head-coach Supabase session verification.
 - Optional server-to-server runner secret path for future scheduled checks.
 - Future Vercel Cron compatibility through `Authorization: Bearer ${CRON_SECRET}` on `GET`.
@@ -12,6 +13,12 @@ The runner is the protected server layer for Apollo. It is intentionally limited
 - No background loop.
 - No model call.
 - No deployment, migration, access, or paid action.
+
+## Department agents
+
+- Head of Security: checks runner boundaries, service-role readiness, scheduler-secret readiness, and model-access lock state.
+- Head of Cyber: checks defensive scope, runner-secret abuse resistance, and permission-escalation boundaries.
+- QA Lead: checks manual runner flow, lightweight Supabase read reachability, and audit persistence readiness.
 
 ## Environment variables
 

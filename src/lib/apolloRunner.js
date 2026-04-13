@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 
-export async function runApolloReadinessCheck() {
+async function runApolloCheck(runType) {
   const { data, error: sessionError } = await supabase.auth.getSession();
   const token = data.session?.access_token;
 
@@ -14,7 +14,7 @@ export async function runApolloReadinessCheck() {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ runType: "readiness" }),
+    body: JSON.stringify({ runType }),
   });
 
   const payload = await response.json().catch(() => ({}));
@@ -23,4 +23,12 @@ export async function runApolloReadinessCheck() {
   }
 
   return payload;
+}
+
+export function runApolloReadinessCheck() {
+  return runApolloCheck("readiness");
+}
+
+export function runApolloDepartmentReview() {
+  return runApolloCheck("department_review");
 }

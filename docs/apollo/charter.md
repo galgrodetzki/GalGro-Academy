@@ -45,5 +45,5 @@ Apollo memory must be structured. It can store project facts, architecture decis
 
 1. Command foundation: charter, command center, approval model, audit schema.
 2. Server-side runner: protected endpoints, runner secret, narrow write paths.
-3. Department agents: Security, Cyber, QA, Performance, Product, Drill Scout.
+3. Department agents: Security, Cyber, and QA in read-only/report-only mode first; Performance, Product, and Drill Scout supervision later.
 4. Background heartbeat: scheduled and event-triggered checks with cost and scope controls.
