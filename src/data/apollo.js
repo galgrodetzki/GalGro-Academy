@@ -89,13 +89,13 @@ export const APOLLO_FOUNDATION_STEPS = [
   {
     step: "13B",
     title: "Server-side Runner",
-    status: "Next",
-    detail: "Protected server endpoints, CRON_SECRET, model access, and narrow Supabase writes.",
+    status: "Foundation",
+    detail: "Protected manual runner exists. Secrets, model access, and scheduled runs remain locked until approved.",
   },
   {
     step: "13C",
     title: "Department Agents",
-    status: "Queued",
+    status: "Next",
     detail: "Security, Cyber, QA, Performance, Product, and Drill Scout reporting to Apollo.",
   },
   {

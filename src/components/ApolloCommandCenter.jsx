@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Bot,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   APOLLO_FOUNDATION_STEPS,
   APOLLO_PRINCIPLES,
 } from "../data/apollo";
+import { runApolloReadinessCheck } from "../lib/apolloRunner";
 
 const statusStyles = {
   Complete: "border-accent/30 bg-accent/10 text-accent",
@@ -23,6 +25,14 @@ const statusStyles = {
   Next: "border-electric/30 bg-electric/10 text-electric",
   Planned: "border-bg-border bg-bg-card2 text-white/55",
   Queued: "border-bg-border bg-bg-card2 text-white/55",
+};
+
+const severityStyles = {
+  info: "border-electric/20 bg-electric/10 text-electric",
+  low: "border-accent/20 bg-accent/10 text-accent",
+  medium: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
+  high: "border-orange/30 bg-orange/10 text-orange",
+  critical: "border-red-500/30 bg-red-500/10 text-red-300",
 };
 
 function StatusPill({ status }) {
@@ -51,6 +61,27 @@ export default function ApolloCommandCenter({
   customDrillCount = 0,
   memberCount = 0,
 }) {
+  const [runnerState, setRunnerState] = useState({
+    status: "idle",
+    result: null,
+    error: "",
+  });
+  const findings = runnerState.result?.report?.findings ?? [];
+  const runCheck = async () => {
+    setRunnerState({ status: "loading", result: null, error: "" });
+
+    try {
+      const result = await runApolloReadinessCheck();
+      setRunnerState({ status: "success", result, error: "" });
+    } catch (error) {
+      setRunnerState({
+        status: "error",
+        result: null,
+        error: error instanceof Error ? error.message : "Apollo runner could not complete.",
+      });
+    }
+  };
+
   return (
     <div className="space-y-5">
       <section className="academy-panel p-5 md:p-6">
@@ -104,6 +135,68 @@ export default function ApolloCommandCenter({
           value="Not armed"
           detail="Scheduled runs come after the runner is secured."
         />
+      </section>
+
+      <section className="card p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <Shield size={16} className="text-accent" />
+              <h3 className="font-display font-bold">Server-side Runner</h3>
+            </div>
+            <p className="max-w-2xl text-sm leading-relaxed text-white/50">
+              Manual readiness check. Uses your head-coach session, keeps service keys on the server, and records audit data only when the protected database path is configured.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={runCheck}
+            disabled={runnerState.status === "loading"}
+            className="btn btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {runnerState.status === "loading" ? "Checking..." : "Run readiness check"}
+          </button>
+        </div>
+
+        {runnerState.error && (
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {runnerState.error}
+          </div>
+        )}
+
+        {runnerState.result && (
+          <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">Runner</div>
+                <div className="mt-1 text-sm font-bold text-white/85">{runnerState.result.status}</div>
+              </div>
+              <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">Audit</div>
+                <div className="mt-1 text-sm font-bold text-white/85">{runnerState.result.audit?.status}</div>
+              </div>
+              <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">Mode</div>
+                <div className="mt-1 text-sm font-bold text-white/85">{runnerState.result.report?.mode}</div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {findings.map((finding) => (
+                <div key={finding.title} className="rounded-lg border border-bg-border bg-bg-soft p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="text-sm font-bold text-white/85">{finding.title}</div>
+                    <span className={`tag border shrink-0 normal-case tracking-normal ${severityStyles[finding.severity] ?? severityStyles.info}`}>
+                      {finding.severity}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-white/50">{finding.detail}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-white/35">{finding.recommendation}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[0.85fr_1.15fr]">
