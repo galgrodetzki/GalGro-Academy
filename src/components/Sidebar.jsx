@@ -1,9 +1,11 @@
 import { LayoutDashboard, BookOpen, Layers, Users, Calendar, Settings, LogOut, Shield } from "lucide-react";
+import { motion as Motion } from "framer-motion";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { EMPTY_SESSION } from "../hooks/useSession";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import BrandMark from "./BrandMark";
+import { navItemTap } from "../utils/motion";
 
 const NAV = [
   { key: "dashboard", label: "Dashboard",       icon: LayoutDashboard },
@@ -45,68 +47,86 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
           const active  = page === key;
           const showDot = key === "builder" && hasSessionInProgress && !active;
           return (
-            <button
+            <Motion.button
               key={key}
               onClick={() => setPage(key)}
-              className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left ${
+              whileTap={navItemTap}
+              className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left overflow-hidden ${
                 active
-                  ? "bg-accent/10 text-accent border border-accent/25 shadow-[inset_3px_0_0_rgba(0,232,122,0.95)]"
-                  : "text-white/50 hover:text-white hover:bg-bg-card"
+                  ? "text-accent border-accent/25 shadow-[inset_3px_0_0_rgba(0,232,122,0.95)]"
+                  : "text-white/50 border-transparent hover:text-white hover:bg-bg-card"
               }`}
             >
-              <span className="relative">
+              {active && (
+                <Motion.span
+                  layoutId="sidebar-active-surface"
+                  className="absolute inset-0 rounded-lg bg-accent/10"
+                  transition={{ type: "spring", stiffness: 420, damping: 36 }}
+                />
+              )}
+              <span className="relative z-10">
                 <Icon size={18} strokeWidth={active ? 2.5 : 2} />
                 {showDot && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent shadow-[0_0_6px_#00e87a]" />
                 )}
               </span>
-              <span>{label}</span>
+              <span className="relative z-10">{label}</span>
               {showDot && (
-                <span className="ml-auto text-[10px] font-bold text-accent/80 bg-accent/10 px-1.5 py-0.5 rounded-full">
+                <span className="relative z-10 ml-auto text-[10px] font-bold text-accent/80 bg-accent/10 px-1.5 py-0.5 rounded-full">
                   IN PROGRESS
                 </span>
               )}
-            </button>
+            </Motion.button>
           );
         })}
 
         {/* Admin — head coach only */}
         {isCoach && (
-          <button
+          <Motion.button
             onClick={() => setPage("admin")}
-            className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left ${
+            whileTap={navItemTap}
+            className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left overflow-hidden ${
               page === "admin"
-                ? "bg-accent/10 text-accent border border-accent/25 shadow-[inset_3px_0_0_rgba(0,232,122,0.95)]"
-                : "text-white/50 hover:text-white hover:bg-bg-card"
+                ? "text-accent border-accent/25 shadow-[inset_3px_0_0_rgba(0,232,122,0.95)]"
+                : "text-white/50 border-transparent hover:text-white hover:bg-bg-card"
             }`}
           >
-            <Shield size={18} />
-            <span>Admin</span>
+            {page === "admin" && (
+              <Motion.span
+                layoutId="sidebar-active-surface"
+                className="absolute inset-0 rounded-lg bg-accent/10"
+                transition={{ type: "spring", stiffness: 420, damping: 36 }}
+              />
+            )}
+            <Shield className="relative z-10" size={18} />
+            <span className="relative z-10">Admin</span>
             {pendingProposalCount > 0 && page !== "admin" && (
-              <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-[10px] font-black flex items-center justify-center shadow-glow">
+              <span className="relative z-10 ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-[10px] font-black flex items-center justify-center shadow-glow">
                 {pendingProposalCount}
               </span>
             )}
-          </button>
+          </Motion.button>
         )}
       </nav>
 
       {/* Footer */}
       <div className="pt-4 border-t border-bg-border space-y-1">
-        <button
+        <Motion.button
           onClick={onOpenSettings}
+          whileTap={navItemTap}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-white/50 hover:text-white hover:bg-bg-card transition-colors"
         >
           <Settings size={18} />
           <span>Settings</span>
-        </button>
-        <button
+        </Motion.button>
+        <Motion.button
           onClick={signOut}
+          whileTap={navItemTap}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-white/50 hover:text-red-400 hover:bg-bg-card transition-colors"
         >
           <LogOut size={18} />
           <span>Sign out</span>
-        </button>
+        </Motion.button>
         <div className="flex items-center gap-3 px-3 py-3">
           <div className="w-9 h-9 rounded-lg border border-accent/30 bg-accent/10 flex items-center justify-center text-sm font-black text-accent flex-shrink-0">
             {initials}

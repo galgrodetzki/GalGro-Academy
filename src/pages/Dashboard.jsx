@@ -1,8 +1,10 @@
+import { motion as Motion } from "framer-motion";
 import { BookOpen, Layers, Users, Calendar, Sparkles, CheckCircle2, UserCheck } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { DRILLS, CATEGORIES } from "../data/drills";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
+import { heroPanelMotion, softCardHover, softTap, staggerContainer, staggerItem } from "../utils/motion";
 
 const STAT_ACCENTS = {
   accent: "bg-accent/10 text-accent",
@@ -13,7 +15,7 @@ const STAT_ACCENTS = {
 
 function StatCard({ icon: Icon, value, label, accent = "accent", gradient }) {
   return (
-    <div className="card p-5 relative overflow-hidden">
+    <Motion.div className="card p-5 relative overflow-hidden" variants={staggerItem} whileHover={softCardHover}>
       <div
         className="absolute inset-x-0 top-0 h-[3px]"
         style={{ background: gradient }}
@@ -23,7 +25,7 @@ function StatCard({ icon: Icon, value, label, accent = "accent", gradient }) {
       </div>
       <div className="text-3xl font-black tracking-tight">{value}</div>
       <div className="text-xs text-white/50 font-medium mt-0.5">{label}</div>
-    </div>
+    </Motion.div>
   );
 }
 
@@ -58,7 +60,7 @@ export default function Dashboard({ setPage }) {
       />
 
       {/* Hero banner */}
-      <div className="academy-panel p-5 md:p-6 mb-5 md:mb-6">
+      <Motion.div className="academy-panel p-5 md:p-6 mb-5 md:mb-6" {...heroPanelMotion}>
         <div className="relative z-10">
           <div className="brand-overline mb-3">
             <Sparkles size={14} />
@@ -82,15 +84,15 @@ export default function Dashboard({ setPage }) {
                 ? `Drag-and-drop from your library of ${totalDrills} professional drills, organized across ${totalCategories} categories.`
                 : `Browse ${totalDrills} goalkeeper drills and review your upcoming sessions.`}
           </p>
-          <button onClick={() => setPage(primaryAction.page)} className="btn btn-primary">
+          <Motion.button onClick={() => setPage(primaryAction.page)} whileTap={softTap} className="btn btn-primary">
             <PrimaryIcon size={16} />
             {primaryAction.label}
-          </button>
+          </Motion.button>
         </div>
-      </div>
+      </Motion.div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+      <Motion.div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6" variants={staggerContainer} initial="initial" animate="animate">
         {isKeeper ? (
           <>
             <StatCard
@@ -154,36 +156,61 @@ export default function Dashboard({ setPage }) {
             />
           </>
         )}
-      </div>
+      </Motion.div>
 
       {/* Quick actions grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-        <button onClick={() => setPage("library")} className="card card-hover p-5 text-left group">
-          <BookOpen className="text-accent mb-3" size={22} />
-          <div className="font-bold mb-1">Browse Drills</div>
-          <div className="text-xs text-white/50">Explore your library of {totalDrills} drills</div>
-        </button>
+      <Motion.div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4" variants={staggerContainer} initial="initial" animate="animate">
+        <QuickActionCard
+          onClick={() => setPage("library")}
+          icon={BookOpen}
+          iconClassName="text-accent"
+          title="Browse Drills"
+          detail={`Explore your library of ${totalDrills} drills`}
+        />
         {canEdit ? (
           <>
-            <button onClick={() => setPage("builder")} className="card card-hover p-5 text-left group">
-              <Layers className="text-electric mb-3" size={22} />
-              <div className="font-bold mb-1">Build a Session</div>
-              <div className="text-xs text-white/50">Drag-and-drop session planner</div>
-            </button>
-            <button onClick={() => setPage("players")} className="card card-hover p-5 text-left group">
-              <Users className="text-orange mb-3" size={22} />
-              <div className="font-bold mb-1">Manage Players</div>
-              <div className="text-xs text-white/50">Your goalkeeper roster</div>
-            </button>
+            <QuickActionCard
+              onClick={() => setPage("builder")}
+              icon={Layers}
+              iconClassName="text-electric"
+              title="Build a Session"
+              detail="Drag-and-drop session planner"
+            />
+            <QuickActionCard
+              onClick={() => setPage("players")}
+              icon={Users}
+              iconClassName="text-orange"
+              title="Manage Players"
+              detail="Your goalkeeper roster"
+            />
           </>
         ) : (
-          <button onClick={() => setPage("sessions")} className="card card-hover p-5 text-left group sm:col-span-2">
-            <Calendar className="text-electric mb-3" size={22} />
-            <div className="font-bold mb-1">My Sessions</div>
-            <div className="text-xs text-white/50">Review upcoming and completed sessions</div>
-          </button>
+          <QuickActionCard
+            onClick={() => setPage("sessions")}
+            icon={Calendar}
+            iconClassName="text-electric"
+            title="My Sessions"
+            detail="Review upcoming and completed sessions"
+            className="sm:col-span-2"
+          />
         )}
-      </div>
+      </Motion.div>
     </div>
+  );
+}
+
+function QuickActionCard({ onClick, icon: Icon, iconClassName, title, detail, className = "" }) {
+  return (
+    <Motion.button
+      onClick={onClick}
+      className={`card card-hover p-5 text-left group ${className}`}
+      variants={staggerItem}
+      whileHover={softCardHover}
+      whileTap={softTap}
+    >
+      <Icon className={`${iconClassName} mb-3 transition-transform duration-200 group-hover:translate-x-0.5`} size={22} />
+      <div className="font-bold mb-1 transition-colors group-hover:text-accent">{title}</div>
+      <div className="text-xs text-white/50">{detail}</div>
+    </Motion.button>
   );
 }

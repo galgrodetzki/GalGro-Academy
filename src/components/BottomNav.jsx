@@ -57,7 +57,11 @@ export default function BottomNav({ page, setPage }) {
               </span>
               <span className="text-[10px] font-semibold tracking-tight">{label}</span>
               {active && (
-                <span className="absolute top-0 left-1/2 h-0.5 w-10 -translate-x-1/2 rounded-b-full bg-accent shadow-[0_0_12px_rgba(0,232,122,0.45)]" />
+                <Motion.span
+                  layoutId="bottom-nav-active-indicator"
+                  className="absolute top-0 left-[calc(50%-1.25rem)] h-0.5 w-10 rounded-b-full bg-accent shadow-[0_0_12px_rgba(0,232,122,0.45)]"
+                  transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                />
               )}
             </Motion.button>
           );

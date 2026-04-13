@@ -1,6 +1,8 @@
 import { Settings, LogOut } from "lucide-react";
+import { motion as Motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import BrandMark from "./BrandMark";
+import { navItemTap } from "../utils/motion";
 
 export default function MobileHeader({ onOpenSettings }) {
   const { profile, signOut } = useAuth();
@@ -15,20 +17,22 @@ export default function MobileHeader({ onOpenSettings }) {
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
-          <button
+          <Motion.button
             onClick={onOpenSettings}
+            whileTap={navItemTap}
             className="p-2.5 rounded-lg text-white/60 hover:text-white active:bg-bg-card transition-colors"
             aria-label="Settings"
           >
             <Settings size={20} />
-          </button>
-          <button
+          </Motion.button>
+          <Motion.button
             onClick={signOut}
+            whileTap={navItemTap}
             className="p-2.5 rounded-lg text-white/60 hover:text-red-400 active:bg-bg-card transition-colors"
             aria-label="Sign out"
           >
             <LogOut size={20} />
-          </button>
+          </Motion.button>
           {/* Avatar */}
           <div className="w-8 h-8 rounded-lg border border-accent/30 bg-accent/10 flex items-center justify-center text-xs font-black text-accent ml-1">
             {initials}
