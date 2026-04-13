@@ -100,6 +100,12 @@ export const APOLLO_FOUNDATION_STEPS = [
   },
   {
     step: "13D",
+    title: "Apollo Chat",
+    status: "Foundation",
+    detail: "Head-coach chat is grounded in Apollo audit history before broader agent autonomy.",
+  },
+  {
+    step: "13E",
     title: "Background Heartbeat",
     status: "Next",
     detail: "Scheduled and event-triggered runs with cost, frequency, and scope controls.",

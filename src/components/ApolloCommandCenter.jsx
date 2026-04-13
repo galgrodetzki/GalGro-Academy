@@ -16,6 +16,7 @@ import {
   APOLLO_FOUNDATION_STEPS,
   APOLLO_PRINCIPLES,
 } from "../data/apollo";
+import ApolloChat from "./ApolloChat";
 import { fetchApolloAuditHistory } from "../lib/apolloAudit";
 import { runApolloDepartmentReview, runApolloReadinessCheck } from "../lib/apolloRunner";
 
@@ -446,6 +447,8 @@ export default function ApolloCommandCenter({
           </div>
         )}
       </section>
+
+      <ApolloChat onAuditRecorded={loadAuditHistory} />
 
       <ApolloAuditHistory
         auditState={auditState}
