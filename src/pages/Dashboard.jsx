@@ -19,6 +19,7 @@ import { DRILLS, CATEGORIES } from "../data/drills";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import { heroPanelMotion, softCardHover, softTap, staggerContainer, staggerItem } from "../utils/motion";
+import { writeSessionNavIntent } from "../utils/sessionNavIntent";
 
 const STAT_ACCENTS = {
   accent: "bg-accent/10 text-accent",
@@ -400,6 +401,12 @@ function KeeperProfileCard({ currentPlayer, insights, setPage }) {
 }
 
 function ReflectionQueueCard({ insights, setPage }) {
+  const firstReflectionSession = insights.needsReflection[0];
+  const openReflection = () => {
+    writeSessionNavIntent({ tab: "past", sessionId: firstReflectionSession?.id ?? "" });
+    setPage("sessions");
+  };
+
   return (
     <Motion.div className="card p-5" variants={staggerItem} whileHover={softCardHover}>
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -427,8 +434,8 @@ function ReflectionQueueCard({ insights, setPage }) {
         </p>
       )}
 
-      <Motion.button onClick={() => setPage("sessions")} whileTap={softTap} className="btn btn-primary mt-5 w-full justify-center">
-        Add reflection <ArrowRight size={14} />
+      <Motion.button onClick={openReflection} whileTap={softTap} className="btn btn-primary mt-5 w-full justify-center">
+        {firstReflectionSession ? "Open next reflection" : "Review sessions"} <ArrowRight size={14} />
       </Motion.button>
     </Motion.div>
   );

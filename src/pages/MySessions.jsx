@@ -12,6 +12,7 @@ import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import { DRILLS, CATEGORIES } from "../data/drills";
 import { modalBackdropMotion, modalPanelMotion } from "../utils/motion";
+import { clearSessionNavIntent, readSessionNavIntent } from "../utils/sessionNavIntent";
 
 const playerById = (players, id) => players.find((p) => p.id === id);
 
@@ -35,6 +36,7 @@ export default function MySessions() {
     saveKeeperNote,
     updateSession: dbUpdate,
     removeSession: dbRemove,
+    dataLoading,
   } = useData();
   const { isKeeper, canEdit } = useAuth();
   const [viewingId, setViewingId] = useState(null);
@@ -44,6 +46,7 @@ export default function MySessions() {
   const [toast, setToast] = useState("");
   const [keeperNoteDraft, setKeeperNoteDraft] = useState("");
   const [savingKeeperNote, setSavingKeeperNote] = useState(false);
+  const [pendingIntent, setPendingIntent] = useState(() => readSessionNavIntent());
   const allDrills = useMemo(() => [...DRILLS, ...customDrills], [customDrills]);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
@@ -74,6 +77,31 @@ export default function MySessions() {
   useEffect(() => {
     setKeeperNoteDraft(currentKeeperNote?.note ?? "");
   }, [currentKeeperNote?.note, viewingId]);
+
+  useEffect(() => {
+    if (!pendingIntent) return;
+
+    setTab(pendingIntent.tab);
+
+    if (!pendingIntent.sessionId) {
+      clearSessionNavIntent();
+      setPendingIntent(null);
+      return;
+    }
+
+    const targetSession = savedSessions.find((s) => s.id === pendingIntent.sessionId);
+    if (targetSession) {
+      setViewingId(targetSession.id);
+      clearSessionNavIntent();
+      setPendingIntent(null);
+      return;
+    }
+
+    if (!dataLoading) {
+      clearSessionNavIntent();
+      setPendingIntent(null);
+    }
+  }, [dataLoading, pendingIntent, savedSessions]);
 
   const updateSession = async (updated) => {
     return dbUpdate(updated);
