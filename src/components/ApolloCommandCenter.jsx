@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Bot,
   CheckCircle2,
   Clock,
   Key,
+  RefreshCw,
   Shield,
   Sparkles,
   Users,
@@ -15,6 +16,7 @@ import {
   APOLLO_FOUNDATION_STEPS,
   APOLLO_PRINCIPLES,
 } from "../data/apollo";
+import { fetchApolloAuditHistory } from "../lib/apolloAudit";
 import { runApolloDepartmentReview, runApolloReadinessCheck } from "../lib/apolloRunner";
 
 const statusStyles = {
@@ -34,6 +36,32 @@ const severityStyles = {
   high: "border-orange/30 bg-orange/10 text-orange",
   critical: "border-red-500/30 bg-red-500/10 text-red-300",
 };
+
+const runStatusStyles = {
+  completed: "border-accent/20 bg-accent/10 text-accent",
+  failed: "border-red-500/30 bg-red-500/10 text-red-300",
+  blocked: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
+  running: "border-electric/20 bg-electric/10 text-electric",
+  queued: "border-bg-border bg-bg-card2 text-white/55",
+};
+
+const auditDateFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+function formatAuditDate(value) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown time";
+  return auditDateFormatter.format(date);
+}
+
+function formatRunType(value = "") {
+  return String(value ?? "").replace(/_/g, " ");
+}
 
 function StatusPill({ status }) {
   return (
@@ -56,6 +84,173 @@ function CommandMetric({ icon: Icon, label, value, detail }) {
   );
 }
 
+function AuditRunButton({ run, selected, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(run.id)}
+      className={`w-full rounded-lg border p-3 text-left transition-colors ${
+        selected
+          ? "border-accent/40 bg-accent/10"
+          : "border-bg-border bg-bg-soft hover:border-bg-card2"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+            {formatAuditDate(run.createdAt)}
+          </div>
+          <div className="mt-1 truncate text-sm font-bold text-white/85">{run.summary}</div>
+        </div>
+        <span className={`tag shrink-0 border normal-case tracking-normal ${runStatusStyles[run.status] ?? runStatusStyles.queued}`}>
+          {run.status}
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/40">
+        <span>{formatRunType(run.runType)}</span>
+        <span>/</span>
+        <span>{run.findingCount} findings</span>
+        {run.approvalCount > 0 && (
+          <>
+            <span>/</span>
+            <span className="text-yellow-300">{run.approvalCount} approvals</span>
+          </>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function AuditFinding({ finding }) {
+  return (
+    <div className="rounded-lg border border-bg-border bg-bg-soft p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+            {finding.agentName}
+          </div>
+          <div className="mt-1 text-sm font-bold text-white/85">{finding.title}</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {finding.approvalRequired && (
+            <span className="tag shrink-0 border border-yellow-500/30 bg-yellow-500/10 normal-case tracking-normal text-yellow-300">
+              approval
+            </span>
+          )}
+          <span className={`tag shrink-0 border normal-case tracking-normal ${severityStyles[finding.severity] ?? severityStyles.info}`}>
+            {finding.severity}
+          </span>
+        </div>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-white/50">{finding.detail}</p>
+      <p className="mt-2 text-xs leading-relaxed text-white/35">{finding.recommendation}</p>
+    </div>
+  );
+}
+
+function ApolloAuditHistory({ auditState, selectedRunId, onSelectRun, onRefresh }) {
+  const selectedRun = auditState.runs.find((run) => run.id === selectedRunId) ?? auditState.runs[0] ?? null;
+  const loading = auditState.status === "loading";
+  const refreshing = auditState.status === "refreshing";
+
+  return (
+    <section className="card p-5">
+      <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <Clock size={16} className="text-electric" />
+            <h3 className="font-display font-bold">Audit History</h3>
+          </div>
+          <p className="max-w-2xl text-sm leading-relaxed text-white/50">
+            Recorded Apollo runs and department findings. This is the trail we review before any background agent is allowed to run.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onRefresh()}
+          disabled={loading || refreshing}
+          className="btn btn-secondary justify-center disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+          {refreshing ? "Refreshing..." : "Refresh history"}
+        </button>
+      </div>
+
+      {auditState.error && (
+        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {auditState.error}
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex items-center justify-center rounded-lg border border-bg-border bg-bg-soft py-10">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        </div>
+      )}
+
+      {!loading && auditState.runs.length === 0 && !auditState.error && (
+        <div className="rounded-lg border border-bg-border bg-bg-soft p-8 text-center">
+          <div className="text-sm font-bold text-white/65">No Apollo audit runs yet</div>
+          <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-white/40">
+            Run a readiness check or department review to record the first audit entry.
+          </p>
+        </div>
+      )}
+
+      {!loading && auditState.runs.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+          <div className="space-y-2">
+            {auditState.runs.map((run) => (
+              <AuditRunButton
+                key={run.id}
+                run={run}
+                selected={run.id === selectedRun?.id}
+                onSelect={onSelectRun}
+              />
+            ))}
+          </div>
+
+          <div className="rounded-lg border border-bg-border bg-bg-card2 p-4">
+            {selectedRun && (
+              <>
+                <div className="flex flex-col gap-3 border-b border-bg-border pb-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+                      {formatAuditDate(selectedRun.createdAt)}
+                    </div>
+                    <div className="mt-1 font-display text-lg font-bold">{selectedRun.summary}</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/40">
+                      <span>{formatRunType(selectedRun.runType)}</span>
+                      <span>/</span>
+                      <span>{selectedRun.scope}</span>
+                      <span>/</span>
+                      <span>{selectedRun.findingCount} findings</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`tag border normal-case tracking-normal ${runStatusStyles[selectedRun.status] ?? runStatusStyles.queued}`}>
+                      {selectedRun.status}
+                    </span>
+                    <span className={`tag border normal-case tracking-normal ${severityStyles[selectedRun.topSeverity] ?? severityStyles.info}`}>
+                      {selectedRun.topSeverity}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {selectedRun.findings.map((finding) => (
+                    <AuditFinding key={finding.id} finding={finding} />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function ApolloCommandCenter({
   pendingProposalCount = 0,
   customDrillCount = 0,
@@ -66,7 +261,41 @@ export default function ApolloCommandCenter({
     result: null,
     error: "",
   });
+  const [auditState, setAuditState] = useState({
+    status: "idle",
+    runs: [],
+    error: "",
+  });
+  const [selectedRunId, setSelectedRunId] = useState("");
   const findings = runnerState.result?.report?.findings ?? [];
+  const loadAuditHistory = useCallback(async (preferredRunId = "") => {
+    setAuditState((current) => ({
+      status: current.runs.length > 0 ? "refreshing" : "loading",
+      runs: current.runs,
+      error: "",
+    }));
+
+    try {
+      const runs = await fetchApolloAuditHistory();
+      setAuditState({ status: "success", runs, error: "" });
+      setSelectedRunId((current) => {
+        if (preferredRunId && runs.some((run) => run.id === preferredRunId)) return preferredRunId;
+        if (current && runs.some((run) => run.id === current)) return current;
+        return runs[0]?.id ?? "";
+      });
+    } catch (error) {
+      setAuditState((current) => ({
+        status: "error",
+        runs: current.runs,
+        error: error instanceof Error ? error.message : "Apollo audit history could not load.",
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAuditHistory();
+  }, [loadAuditHistory]);
+
   const runCheck = async (checkType) => {
     setRunnerState({ status: "loading", result: null, error: "", checkType });
 
@@ -75,6 +304,7 @@ export default function ApolloCommandCenter({
         ? await runApolloDepartmentReview()
         : await runApolloReadinessCheck();
       setRunnerState({ status: "success", result, error: "", checkType });
+      await loadAuditHistory(result.audit?.runId ?? "");
     } catch (error) {
       setRunnerState({
         status: "error",
@@ -216,6 +446,13 @@ export default function ApolloCommandCenter({
           </div>
         )}
       </section>
+
+      <ApolloAuditHistory
+        auditState={auditState}
+        selectedRunId={selectedRunId}
+        onSelectRun={setSelectedRunId}
+        onRefresh={loadAuditHistory}
+      />
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[0.85fr_1.15fr]">
         <div className="card p-5">

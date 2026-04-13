@@ -10,6 +10,7 @@ The runner is the protected server layer for Apollo. It is intentionally limited
 - Optional server-to-server runner secret path for future scheduled checks.
 - Future Vercel Cron compatibility through `Authorization: Bearer ${CRON_SECRET}` on `GET`.
 - Optional audit persistence into `apollo_agent_runs` and `apollo_findings`: manual runs use the verified head-coach session; scheduled runs need the server-only service-role key.
+- Audit-history view in the Admin Apollo tab.
 - No background loop.
 - No model call.
 - No deployment, migration, access, or paid action.
