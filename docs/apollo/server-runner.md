@@ -13,7 +13,7 @@ The runner is the protected server layer for Apollo. It is intentionally limited
 - Audit-history view in the Admin Apollo tab.
 - Apollo Chat v1 in the Admin Apollo tab. It answers from server-built context packs for guardrails, roadmap, audit, portal snapshot, memory, and approvals. It uses the server model path only when AI Gateway auth is configured.
 - Apollo Memory UI in the Admin Apollo tab. Head coaches can add, edit, and delete structured project memory that feeds approved context packs.
-- Apollo Operations status in the Admin Apollo tab. It reports model access, heartbeat gating, and context-pack readiness without exposing secrets.
+- Apollo Operations status in the Admin Apollo tab. It reports model access, heartbeat gating, context-pack readiness, and safe yes/no gate details without exposing secrets.
 - Manual heartbeat dry-run from the Admin Apollo tab. It records read-only department findings, but it is not a scheduled background loop.
 - No scheduled background loop.
 - No browser-side model call.

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Activity, BrainCircuit, RefreshCw, RadioTower } from "lucide-react";
 import { fetchApolloStatus } from "../lib/apolloStatus";
 
-function StatusCell({ icon: Icon, label, value, detail, tone = "neutral" }) {
+function StatusCell({ icon: Icon, label, value, detail, meta = [], tone = "neutral" }) {
   const toneClass = tone === "ready"
     ? "border-accent/30 bg-accent/10 text-accent"
     : tone === "warning"
@@ -17,6 +17,15 @@ function StatusCell({ icon: Icon, label, value, detail, tone = "neutral" }) {
       </div>
       <div className="font-display text-lg font-bold text-white">{value}</div>
       <p className="mt-2 text-xs leading-relaxed text-white/45">{detail}</p>
+      {meta.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {meta.map((item) => (
+            <span key={item} className="tag border border-bg-border bg-bg-card2 normal-case tracking-normal text-white/55">
+              {item}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -99,6 +108,7 @@ export default function ApolloOperationsStatus() {
             label="Model"
             value={model?.configured ? "Model ready" : "Grounded only"}
             detail={model?.message ?? "Apollo status has not loaded yet."}
+            meta={model ? [`auth: ${model.authMode}`, `model: ${model.model}`] : []}
             tone={model?.configured ? "ready" : "warning"}
           />
           <StatusCell
@@ -106,6 +116,11 @@ export default function ApolloOperationsStatus() {
             label="Heartbeat"
             value={heartbeat?.armed ? "Armed" : "Dry run only"}
             detail={heartbeat?.message ?? "Apollo status has not loaded yet."}
+            meta={heartbeat ? [
+              `enabled: ${heartbeat.enabled ? "yes" : "no"}`,
+              `runner secret: ${heartbeat.runnerSecretConfigured ? "yes" : "no"}`,
+              `service role: ${heartbeat.serviceRoleConfigured ? "yes" : "no"}`,
+            ] : []}
             tone={heartbeat?.armed ? "ready" : "warning"}
           />
           <StatusCell
