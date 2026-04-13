@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import PageHeader from "../components/PageHeader";
+import ApolloCommandCenter from "../components/ApolloCommandCenter";
 import { formatAccessDate, getAccessStatus, getLocalDateKey } from "../utils/access";
 import {
   Plus, Copy, Trash2, Check, Users, Shield, Key,
@@ -178,7 +179,7 @@ export default function Admin() {
   const [actionLoading, setActionLoading] = useState(false);
   const [copied, setCopied]     = useState(null);
   const [toast, setToast]       = useState("");
-  const [activeTab, setActiveTab] = useState("access"); // "access" | "inbox" | "library"
+  const [activeTab, setActiveTab] = useState("access"); // "access" | "apollo" | "inbox" | "library"
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
@@ -345,9 +346,10 @@ export default function Admin() {
   const reviewedProposals = proposals.filter((p) => p.status !== "pending");
 
   const tabs = [
-    { id: "access",  label: "Access",       icon: Key },
-    { id: "inbox",   label: "Agent Inbox",  icon: Bot,      badge: pendingProposalCount },
-    { id: "library", label: "Custom Drills",icon: BookOpen, badge: customDrills.length || null },
+    { id: "access",  label: "Access",        shortLabel: "Access", icon: Key },
+    { id: "apollo",  label: "Apollo",        shortLabel: "Apollo", icon: Shield },
+    { id: "inbox",   label: "Agent Inbox",   shortLabel: "Inbox",  icon: Bot,      badge: pendingProposalCount },
+    { id: "library", label: "Custom Drills", shortLabel: "Drills", icon: BookOpen, badge: customDrills.length || null },
   ];
 
   if (loading) return (
@@ -358,11 +360,11 @@ export default function Admin() {
 
   return (
     <div>
-      <PageHeader title="Admin" subtitle="Manage access, agent proposals, and your drill library" />
+      <PageHeader title="Admin" subtitle="Manage access, Apollo command, agent proposals, and your drill library" />
 
       {/* Tab bar */}
       <div className="flex gap-1 bg-bg-soft border border-bg-border rounded-xl p-1 mb-6">
-        {tabs.map(({ id, label, icon: Icon, badge }) => (
+        {tabs.map(({ id, label, shortLabel, icon: Icon, badge }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
@@ -372,7 +374,7 @@ export default function Admin() {
           >
             <Icon size={13} />
             <span className="hidden sm:inline">{label}</span>
-            <span className="sm:hidden">{id === "access" ? "Access" : id === "inbox" ? "Inbox" : "Drills"}</span>
+            <span className="sm:hidden">{shortLabel}</span>
             {badge > 0 && (
               <span className={`absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-black flex items-center justify-center ${
                 activeTab === id ? "bg-black/30 text-black" : "bg-accent text-black"
@@ -555,6 +557,15 @@ export default function Admin() {
             )}
           </div>
         </div>
+      )}
+
+      {/* -- APOLLO TAB -- */}
+      {activeTab === "apollo" && (
+        <ApolloCommandCenter
+          pendingProposalCount={pendingProposalCount}
+          customDrillCount={customDrills.length}
+          memberCount={profiles.length}
+        />
       )}
 
       {/* ── AGENT INBOX TAB ── */}
