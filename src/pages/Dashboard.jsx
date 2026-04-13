@@ -1,10 +1,13 @@
 import { useMemo } from "react";
 import { motion as Motion } from "framer-motion";
 import {
+  Activity,
   ArrowRight,
+  Award,
   BookOpen,
   Calendar,
   CheckCircle2,
+  Clock,
   Layers,
   Link2,
   MessageSquareText,
@@ -38,9 +41,22 @@ const formatDate = (iso) =>
       })
     : "No date set";
 
+const formatDateTime = (iso) =>
+  iso
+    ? new Date(iso).toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+      })
+    : "No date set";
+
 function attendedSession(session, playerId) {
   if (!Array.isArray(session.attendance) || session.attendance.length === 0) return true;
   return session.attendance.includes(playerId);
+}
+
+function sessionMinutes(session) {
+  const total = Number(session.totalDuration);
+  if (Number.isFinite(total) && total > 0) return total;
+  return session.blocks?.reduce((sum, block) => sum + Number(block.actualDur ?? block.dur ?? 0), 0) ?? 0;
 }
 
 function buildKeeperInsights({ currentPlayer, sessions, keeperNotes, allDrills }) {
@@ -54,7 +70,12 @@ function buildKeeperInsights({ currentPlayer, sessions, keeperNotes, allDrills }
       needsReflection: [],
       topFocus: [],
       recent: [],
-      attendanceRate: 0,
+      attendanceRate: null,
+      attendanceTracked: [],
+      attendedTracked: [],
+      trainingMinutes: 0,
+      reflectionRate: null,
+      lastReflection: null,
       nextSession: null,
       lastCompleted: null,
     };
@@ -70,6 +91,8 @@ function buildKeeperInsights({ currentPlayer, sessions, keeperNotes, allDrills }
     .filter((s) => s.status === "completed")
     .sort(byRecentDate);
   const attended = completed.filter((s) => attendedSession(s, currentPlayer.id));
+  const attendanceTracked = completed.filter((s) => Array.isArray(s.attendance) && s.attendance.length > 0);
+  const attendedTracked = attendanceTracked.filter((s) => s.attendance.includes(currentPlayer.id));
   const reflections = keeperNotes
     .filter((note) => note.playerId === currentPlayer.id)
     .sort((a, b) => (a.updatedAt || a.createdAt || "") > (b.updatedAt || b.createdAt || "") ? -1 : 1);
@@ -78,6 +101,7 @@ function buildKeeperInsights({ currentPlayer, sessions, keeperNotes, allDrills }
     .filter((session) => !reflectedSessionIds.has(session.id))
     .slice(0, 3);
   const focusMap = new Map();
+  const trainingMinutes = attended.reduce((sum, session) => sum + sessionMinutes(session), 0);
 
   attended.forEach((session) => {
     session.blocks?.forEach((block) => {
@@ -111,7 +135,12 @@ function buildKeeperInsights({ currentPlayer, sessions, keeperNotes, allDrills }
     needsReflection,
     topFocus,
     recent: recent.slice(0, 5),
-    attendanceRate: completed.length ? Math.round((attended.length / completed.length) * 100) : 0,
+    attendanceRate: attendanceTracked.length ? Math.round((attendedTracked.length / attendanceTracked.length) * 100) : null,
+    attendanceTracked,
+    attendedTracked,
+    trainingMinutes,
+    reflectionRate: attended.length ? Math.round(((attended.length - needsReflection.length) / attended.length) * 100) : null,
+    lastReflection: reflections[0] ?? null,
     nextSession: upcoming[0] ?? null,
     lastCompleted: completed[0] ?? null,
   };
@@ -145,6 +174,7 @@ export default function Dashboard({ setPage }) {
     [allDrills, currentPlayer, keeperNotes, savedSessions],
   );
   const { upcoming: keeperUpcoming, completed: keeperCompleted, attendanceRate } = keeperInsights;
+  const attendanceCopy = attendanceRate === null ? "no recorded attendance yet" : `${attendanceRate}% attendance`;
   const primaryAction = canEdit
     ? { page: "builder", label: "Start Building", icon: Layers }
     : { page: "sessions", label: "View Sessions", icon: Calendar };
@@ -176,7 +206,7 @@ export default function Dashboard({ setPage }) {
           <p className="text-white/60 text-sm max-w-xl mb-4">
             {isKeeper
               ? currentPlayer
-                ? `${keeperUpcoming.length} upcoming sessions, ${keeperCompleted.length} completed, and ${attendanceRate}% attendance across completed work.`
+                ? `${keeperUpcoming.length} upcoming sessions, ${keeperCompleted.length} completed, and ${attendanceCopy}.`
                 : "Ask your coach to match your account name to your roster profile so your sessions appear here."
               : canEdit
                 ? `Drag-and-drop from your library of ${totalDrills} professional drills, organized across ${totalCategories} categories.`
@@ -209,7 +239,7 @@ export default function Dashboard({ setPage }) {
             />
             <StatCard
               icon={UserCheck}
-              value={currentPlayer ? `${attendanceRate}%` : "—"}
+              value={currentPlayer && attendanceRate !== null ? `${attendanceRate}%` : "—"}
               label="Attendance"
               accent="orange"
               gradient="linear-gradient(90deg, #ff6b35, transparent)"
@@ -352,7 +382,8 @@ function KeeperPortal({ currentPlayer, insights, setPage }) {
         initial="initial"
         animate="animate"
       >
-        <KeeperProfileCard currentPlayer={currentPlayer} insights={insights} setPage={setPage} />
+        <KeeperProfileSnapshot currentPlayer={currentPlayer} insights={insights} setPage={setPage} />
+        <KeeperProfileCard insights={insights} setPage={setPage} />
         <ReflectionQueueCard insights={insights} setPage={setPage} />
         <TrainingFocusCard insights={insights} focusTotal={focusTotal} />
         <RecentKeeperWorkCard insights={insights} setPage={setPage} />
@@ -361,19 +392,126 @@ function KeeperPortal({ currentPlayer, insights, setPage }) {
   );
 }
 
-function KeeperProfileCard({ currentPlayer, insights, setPage }) {
+function KeeperProfileSnapshot({ currentPlayer, insights, setPage }) {
+  const pendingReflections = insights.needsReflection.length;
+  const hasNextSession = !!insights.nextSession;
+  const lastReflectionDate = insights.lastReflection?.updatedAt ?? insights.lastReflection?.createdAt ?? "";
+  const profileFacts = [
+    currentPlayer.age ? { label: "Age", value: `${currentPlayer.age} yrs` } : null,
+    currentPlayer.height ? { label: "Height", value: `${currentPlayer.height} cm` } : null,
+    currentPlayer.weight ? { label: "Weight", value: `${currentPlayer.weight} kg` } : null,
+    currentPlayer.dominantFoot ? { label: "Foot", value: currentPlayer.dominantFoot } : null,
+  ].filter(Boolean);
+  const actionLabel = pendingReflections
+    ? "Open next reflection"
+    : hasNextSession
+      ? "Open next session"
+      : insights.recent.length
+        ? "Review full history"
+        : "Browse drills";
+  const actionDetail = pendingReflections
+    ? `${pendingReflections} completed session${pendingReflections === 1 ? "" : "s"} waiting for your note.`
+    : hasNextSession
+      ? `${insights.nextSession.name} · ${formatDate(insights.nextSession.sessionDate)}`
+      : insights.recent.length
+        ? "Review your completed and upcoming work."
+        : "Build your own reference point from the drill library.";
+  const handlePrimaryAction = () => {
+    if (pendingReflections) {
+      writeSessionNavIntent({ tab: "past", sessionId: insights.needsReflection[0]?.id ?? "" });
+      setPage("sessions");
+      return;
+    }
+    if (hasNextSession) {
+      writeSessionNavIntent({ tab: "upcoming", sessionId: insights.nextSession.id });
+      setPage("sessions");
+      return;
+    }
+    setPage(insights.recent.length ? "sessions" : "library");
+  };
+
+  return (
+    <Motion.div className="academy-panel p-5 md:p-6 lg:col-span-3" variants={staggerItem}>
+      <div className="relative z-10 grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr] lg:items-center">
+        <div>
+          <div className="brand-overline mb-3">Keeper profile</div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h4 className="font-display text-2xl md:text-3xl font-bold">{currentPlayer.name}</h4>
+              <p className="mt-2 max-w-2xl text-sm text-white/55">
+                {pendingReflections
+                  ? "Your next useful step is a short reflection while the session is still fresh."
+                  : hasNextSession
+                    ? "Your next session is ready. Check the plan before you arrive."
+                    : "Your profile will sharpen as sessions, attendance, and reflections build up."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 sm:justify-end">
+              <span className="tag border border-accent/20 bg-accent/10 text-accent">{currentPlayer.position}</span>
+              {profileFacts.map((fact) => (
+                <span key={fact.label} className="tag border border-bg-border bg-bg-card2 text-white/60 normal-case tracking-normal">
+                  {fact.label}: {fact.value}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <ProfileMiniMetric
+              icon={UserCheck}
+              label="Attendance"
+              value={insights.attendanceRate === null ? "—" : `${insights.attendanceRate}%`}
+              detail={insights.attendanceTracked.length ? `${insights.attendedTracked.length}/${insights.attendanceTracked.length} recorded` : "No records"}
+              accent={insights.attendanceRate !== null}
+            />
+            <ProfileMiniMetric
+              icon={MessageSquareText}
+              label="Reflections"
+              value={insights.reflections.length}
+              detail={pendingReflections ? `${pendingReflections} pending` : "Up to date"}
+              accent={insights.reflections.length > 0}
+            />
+            <ProfileMiniMetric
+              icon={Clock}
+              label="Training"
+              value={insights.trainingMinutes ? `${insights.trainingMinutes}m` : "—"}
+              detail="Attended minutes"
+              accent={insights.trainingMinutes > 0}
+            />
+            <ProfileMiniMetric
+              icon={Award}
+              label="Reflection rate"
+              value={insights.reflectionRate === null ? "—" : `${insights.reflectionRate}%`}
+              detail={lastReflectionDate ? `Last ${formatDateTime(lastReflectionDate)}` : "No notes yet"}
+              accent={insights.reflectionRate !== null}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-accent/15 bg-bg-soft/75 p-4">
+          <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-accent/80">
+            <Activity size={13} />
+            Next best action
+          </div>
+          <h5 className="font-display text-xl font-bold">{actionLabel}</h5>
+          <p className="mt-2 text-sm text-white/50">{actionDetail}</p>
+          <Motion.button onClick={handlePrimaryAction} whileTap={softTap} className="btn btn-primary mt-5 w-full justify-center">
+            {actionLabel} <ArrowRight size={14} />
+          </Motion.button>
+        </div>
+      </div>
+    </Motion.div>
+  );
+}
+
+function KeeperProfileCard({ insights, setPage }) {
   return (
     <Motion.div className="card p-5 lg:col-span-2" variants={staggerItem} whileHover={softCardHover}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="text-xs font-bold uppercase tracking-wide text-white/35">Linked roster profile</div>
-          <h4 className="font-display text-2xl font-bold mt-1">{currentPlayer.name}</h4>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className="tag bg-accent/10 text-accent border border-accent/20">{currentPlayer.position}</span>
-            {currentPlayer.dominantFoot && (
-              <span className="tag bg-bg-card2 border border-bg-border text-white/60">{currentPlayer.dominantFoot} foot</span>
-            )}
-          </div>
+          <div className="text-xs font-bold uppercase tracking-wide text-white/35">Session pulse</div>
+          <h4 className="font-display text-2xl font-bold mt-1">Next and latest work</h4>
+          <p className="mt-1 text-sm text-white/50">Use this to orient before training or review what just happened.</p>
         </div>
         <Motion.button onClick={() => setPage("sessions")} whileTap={softTap} className="btn btn-secondary sm:shrink-0">
           Open sessions <ArrowRight size={14} />
@@ -397,6 +535,19 @@ function KeeperProfileCard({ currentPlayer, insights, setPage }) {
         />
       </div>
     </Motion.div>
+  );
+}
+
+function ProfileMiniMetric({ icon: Icon, label, value, detail, accent }) {
+  return (
+    <div className="rounded-lg border border-bg-border bg-bg-soft/80 p-3">
+      <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
+        <Icon size={12} className={accent ? "text-accent" : "text-white/35"} />
+        {label}
+      </div>
+      <div className={`font-display text-xl font-bold ${accent ? "text-accent" : "text-white"}`}>{value}</div>
+      <div className="mt-1 truncate text-[11px] text-white/40">{detail}</div>
+    </div>
   );
 }
 
