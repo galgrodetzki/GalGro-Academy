@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useScrollLock } from "../hooks/useScrollLock";
 import { useData } from "../context/DataContext";
@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   Users, Plus, X, Save, PenLine, Trash2, Eye,
   Calendar, Cake, Ruler, Weight, StickyNote, Link2,
+  CheckCircle2, Clock3, MessageSquareText, UserCheck,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { modalBackdropMotion, modalPanelMotion } from "../utils/motion";
@@ -31,6 +32,40 @@ const EMPTY_PLAYER = {
   notes: "",
 };
 
+const byNewestSession = (a, b) => (a.sessionDate || "") > (b.sessionDate || "") ? -1 : 1;
+const byOldestSession = (a, b) => (a.sessionDate || "") > (b.sessionDate || "") ? 1 : -1;
+
+function buildKeeperProfile(player, sessions, keeperNotes) {
+  const assigned = sessions
+    .filter((s) => s.playerIds?.includes(player.id))
+    .sort(byNewestSession);
+  const upcoming = assigned
+    .filter((s) => s.status === "planned" || !s.status)
+    .sort(byOldestSession);
+  const completed = assigned
+    .filter((s) => s.status === "completed")
+    .sort(byNewestSession);
+  const attendanceTracked = completed.filter((s) => Array.isArray(s.attendance) && s.attendance.length > 0);
+  const attended = attendanceTracked.filter((s) => s.attendance.includes(player.id));
+  const reflections = keeperNotes
+    .filter((note) => note.playerId === player.id)
+    .sort((a, b) => (a.updatedAt || a.createdAt || "") > (b.updatedAt || b.createdAt || "") ? -1 : 1);
+
+  return {
+    assigned,
+    upcoming,
+    completed,
+    attended,
+    attendanceTracked,
+    reflections,
+    attendanceRate: attendanceTracked.length
+      ? Math.round((attended.length / attendanceTracked.length) * 100)
+      : null,
+    nextSession: upcoming[0] ?? null,
+    lastCompleted: completed[0] ?? null,
+  };
+}
+
 export default function Players() {
   const { players, sessions: savedSessions, keeperNotes, memberProfiles, addPlayer, updatePlayer, removePlayer } = useData();
   const { isCoach, canEdit } = useAuth();
@@ -42,6 +77,10 @@ export default function Players() {
   const [toast, setToast] = useState("");
 
   useScrollLock(!!(showForm || viewing));
+  const viewingProfile = useMemo(
+    () => viewing ? buildKeeperProfile(viewing, savedSessions, keeperNotes) : null,
+    [keeperNotes, savedSessions, viewing],
+  );
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
@@ -88,13 +127,12 @@ export default function Players() {
   // Sessions linked to a player
   const playerSessions = (playerId) =>
     savedSessions.filter((s) => s.playerIds?.includes(playerId));
-  const playerKeeperNotes = (playerId) =>
-    keeperNotes.filter((note) => note.playerId === playerId);
   const keeperProfiles = memberProfiles.filter((member) => member.role === "keeper");
   const linkedProfileFor = (profileId) =>
     profileId ? memberProfiles.find((member) => member.id === profileId) : null;
   const linkedPlayerForProfile = (profileId, exceptPlayerId) =>
     profileId ? players.find((player) => player.profileId === profileId && player.id !== exceptPlayerId) : null;
+  const viewingLinkedProfile = viewing?.profileId ? linkedProfileFor(viewing.profileId) : null;
 
   return (
     <div>
@@ -337,14 +375,14 @@ export default function Players() {
 
       {/* Player detail modal */}
       <AnimatePresence>
-        {viewing && !showForm && (
+        {viewing && viewingProfile && !showForm && (
         <Motion.div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setViewing(null)}
           {...modalBackdropMotion}
         >
           <Motion.div
-            className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[90vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
+            className="card w-full md:max-w-3xl max-h-[92vh] md:max-h-[90vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
             {...modalPanelMotion}
           >
@@ -362,9 +400,9 @@ export default function Players() {
                   {viewing.dominantFoot && (
                     <span className="tag bg-bg-card2 border border-bg-border text-white/60">{viewing.dominantFoot} foot</span>
                   )}
-                  {viewing.profileId && (
+                  {viewingLinkedProfile && (
                     <span className="tag bg-electric/10 border border-electric/20 text-electric">
-                      Account: {linkedProfileFor(viewing.profileId)?.name ?? "Linked"}
+                      Account: {viewingLinkedProfile.name}
                     </span>
                   )}
                   {viewing.joinedAt && (
@@ -379,46 +417,78 @@ export default function Players() {
               )}
             </div>
 
-            {/* Physical stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6">
+              <ProfileMetric
+                label="Attendance"
+                value={viewingProfile.attendanceRate === null ? "—" : `${viewingProfile.attendanceRate}%`}
+                hint={viewingProfile.attendanceTracked.length ? `${viewingProfile.attended.length}/${viewingProfile.attendanceTracked.length} recorded` : "No records"}
+                accent={viewingProfile.attendanceRate !== null}
+              />
+              <ProfileMetric label="Completed" value={viewingProfile.completed.length} hint="Sessions" />
+              <ProfileMetric label="Upcoming" value={viewingProfile.upcoming.length} hint="Assigned" />
+              <ProfileMetric label="Reflections" value={viewingProfile.reflections.length} hint="Keeper notes" accent={viewingProfile.reflections.length > 0} />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+              <ProfileSignal
+                icon={Clock3}
+                label="Next session"
+                title={viewingProfile.nextSession?.name ?? "Nothing scheduled"}
+                detail={viewingProfile.nextSession ? formatDate(viewingProfile.nextSession.sessionDate) : "Assign this keeper in the Session Builder."}
+              />
+              <ProfileSignal
+                icon={CheckCircle2}
+                label="Latest completed"
+                title={viewingProfile.lastCompleted?.name ?? "No completed sessions"}
+                detail={viewingProfile.lastCompleted ? formatDate(viewingProfile.lastCompleted.sessionDate) : "Complete a session to build history."}
+                accent={!!viewingProfile.lastCompleted}
+              />
+            </div>
+
+            <div className="rounded-lg border border-bg-border bg-bg-soft p-4 mb-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-electric/10 border border-electric/20 flex items-center justify-center shrink-0">
+                    <Link2 size={16} className="text-electric" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold">Login account</div>
+                    <div className="text-xs text-white/45 mt-0.5">
+                      {viewingLinkedProfile
+                        ? `${viewingLinkedProfile.name} can see this keeper's assigned sessions.`
+                        : "No keeper account is linked yet."}
+                    </div>
+                  </div>
+                </div>
+                {canEdit && (
+                  <button onClick={() => { setViewing(null); openEdit(viewing); }} className="btn btn-secondary py-1.5 px-3 text-xs md:shrink-0">
+                    <Link2 size={12} /> Manage link
+                  </button>
+                )}
+              </div>
+            </div>
+
             {(viewing.age || viewing.height || viewing.weight) && (
-              <div className="grid grid-cols-3 gap-3 mb-6">
-                {viewing.age && (
-                  <div className="card bg-bg-soft p-3 text-center">
-                    <Cake size={16} className="mx-auto text-white/40 mb-1" />
-                    <div className="font-bold text-lg">{viewing.age}</div>
-                    <div className="text-[11px] text-white/40">years old</div>
-                  </div>
-                )}
-                {viewing.height && (
-                  <div className="card bg-bg-soft p-3 text-center">
-                    <Ruler size={16} className="mx-auto text-white/40 mb-1" />
-                    <div className="font-bold text-lg">{viewing.height}</div>
-                    <div className="text-[11px] text-white/40">cm</div>
-                  </div>
-                )}
-                {viewing.weight && (
-                  <div className="card bg-bg-soft p-3 text-center">
-                    <Weight size={16} className="mx-auto text-white/40 mb-1" />
-                    <div className="font-bold text-lg">{viewing.weight}</div>
-                    <div className="text-[11px] text-white/40">kg</div>
-                  </div>
-                )}
+              <div className="grid grid-cols-3 gap-2 mb-6">
+                {viewing.age && <ProfileBodyStat icon={Cake} label="Age" value={`${viewing.age} yrs`} />}
+                {viewing.height && <ProfileBodyStat icon={Ruler} label="Height" value={`${viewing.height} cm`} />}
+                {viewing.weight && <ProfileBodyStat icon={Weight} label="Weight" value={`${viewing.weight} kg`} />}
               </div>
             )}
 
             {/* Notes */}
             {viewing.notes && (
-              <div className="card bg-bg-soft p-4 mb-6">
+              <div className="rounded-lg border border-bg-border bg-bg-soft p-4 mb-6">
                 <div className="label mb-1 flex items-center gap-1.5"><StickyNote size={12} /> Coach notes</div>
                 <p className="text-sm text-white/80 leading-relaxed">{viewing.notes}</p>
               </div>
             )}
 
-            {playerKeeperNotes(viewing.id).length > 0 && (
-              <div className="card bg-bg-soft p-4 mb-6">
-                <div className="label mb-3 flex items-center gap-1.5"><StickyNote size={12} /> Keeper reflections</div>
+            {viewingProfile.reflections.length > 0 && (
+              <div className="rounded-lg border border-bg-border bg-bg-soft p-4 mb-6">
+                <div className="label mb-3 flex items-center gap-1.5"><MessageSquareText size={12} /> Keeper reflections</div>
                 <div className="space-y-3">
-                  {playerKeeperNotes(viewing.id).map((note) => {
+                  {viewingProfile.reflections.map((note) => {
                     const session = savedSessions.find((s) => s.id === note.sessionId);
                     return (
                       <div key={note.id} className="border-t border-bg-border first:border-t-0 first:pt-0 pt-3">
@@ -439,7 +509,7 @@ export default function Players() {
             <div className="mb-2">
               <div className="label mb-3">Session history</div>
               <PlayerSessionList
-                sessions={savedSessions}
+                sessions={viewingProfile.assigned}
                 playerId={viewing.id}
               />
             </div>
@@ -462,6 +532,39 @@ export default function Players() {
 }
 
 /* ------------------------- SESSION LIST IN PLAYER DETAIL ---------------- */
+function ProfileMetric({ label, value, hint, accent }) {
+  return (
+    <div className="rounded-lg border border-bg-border bg-bg-soft p-3">
+      <div className={`font-display text-xl font-bold ${accent ? "text-accent" : "text-white"}`}>{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-white/35">{label}</div>
+      {hint && <div className="mt-1 truncate text-[11px] text-white/40">{hint}</div>}
+    </div>
+  );
+}
+
+function ProfileSignal({ icon: Icon, label, title, detail, accent }) {
+  return (
+    <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
+      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
+        <Icon size={13} className={accent ? "text-accent" : "text-white/35"} />
+        {label}
+      </div>
+      <div className="truncate text-sm font-bold">{title}</div>
+      <div className="mt-1 text-xs text-white/45">{detail}</div>
+    </div>
+  );
+}
+
+function ProfileBodyStat({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-lg border border-bg-border bg-bg-soft p-3 text-center">
+      <Icon size={15} className="mx-auto mb-1 text-white/40" />
+      <div className="text-sm font-bold">{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-white/35">{label}</div>
+    </div>
+  );
+}
+
 function PlayerSessionList({ sessions, playerId }) {
   const assigned = sessions
     .filter((s) => s.playerIds?.includes(playerId))
@@ -469,7 +572,7 @@ function PlayerSessionList({ sessions, playerId }) {
 
   if (assigned.length === 0) {
     return (
-      <div className="card p-6 text-center text-white/40 text-sm">
+      <div className="rounded-lg border border-bg-border bg-bg-soft p-6 text-center text-white/40 text-sm">
         No sessions yet. Assign this player when saving a session in the Session Builder.
       </div>
     );
@@ -484,31 +587,39 @@ function PlayerSessionList({ sessions, playerId }) {
         <StatPill label="Upcoming" value={upcoming.length} />
         <StatPill label="Completed" value={completed.length} accent />
       </div>
-      {assigned.map((s) => (
-        <div key={s.id} className="card p-3">
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${s.status === "completed" ? "bg-emerald-400" : "bg-accent"}`} />
-            <div className="font-semibold text-sm truncate flex-1">{s.name}</div>
-            <span className={`text-[10px] font-bold uppercase tracking-wide ${s.status === "completed" ? "text-emerald-400" : "text-accent"}`}>
-              {s.status === "completed" ? "Done" : "Upcoming"}
-            </span>
+      {assigned.map((s) => {
+        const attendanceRecorded = Array.isArray(s.attendance) && s.attendance.length > 0;
+        const attended = attendanceRecorded && s.attendance.includes(playerId);
+
+        return (
+          <div key={s.id} className="rounded-lg border border-bg-border bg-bg-soft p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${s.status === "completed" ? "bg-emerald-400" : "bg-accent"}`} />
+              <div className="font-semibold text-sm truncate flex-1">{s.name}</div>
+              <span className={`text-[10px] font-bold uppercase tracking-wide ${s.status === "completed" ? "text-emerald-400" : "text-accent"}`}>
+                {s.status === "completed" ? "Done" : "Upcoming"}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-white/40 pl-4">
+              <span className="flex items-center gap-1"><Calendar size={10} /> {formatDate(s.sessionDate)}</span>
+              <span>{s.totalDuration} min</span>
+              <span>{s.blocks.length} drills</span>
+              {s.status === "completed" && attendanceRecorded && (
+                <span className={`flex items-center gap-1 ${attended ? "text-accent/80" : "text-red-300/75"}`}>
+                  <UserCheck size={10} /> {attended ? "Attended" : "Absent"}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-3 text-[11px] text-white/40 pl-4">
-            <span className="flex items-center gap-1"><Calendar size={10} /> {formatDate(s.sessionDate)}</span>
-            <span>·</span>
-            <span>{s.totalDuration} min</span>
-            <span>·</span>
-            <span>{s.blocks.length} drills</span>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 function StatPill({ label, value, accent }) {
   return (
-    <div className="card bg-bg-soft p-2 text-center">
+    <div className="rounded-lg border border-bg-border bg-bg-soft p-2 text-center">
       <div className={`font-bold text-base ${accent ? "text-emerald-400" : "text-white"}`}>{value}</div>
       <div className="text-[10px] text-white/40 uppercase tracking-wide">{label}</div>
     </div>
