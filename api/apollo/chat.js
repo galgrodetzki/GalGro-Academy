@@ -129,18 +129,18 @@ function buildGroundedReply(message, context) {
         || ["head_of_security", "head_of_cyber"].includes(finding.agentName?.toLowerCase().replace(/\s+/g, "_"))
         || ["secrets", "runner", "scope", "permissions", "abuse_resistance"].includes(finding.category)
     );
-    return `Security status from the recorded Apollo context:\n${formatFindingList(findings)}\n\nI would keep background heartbeat locked until scheduled audit writes, runner secrets, and rate controls are approved.`;
+    return `Security status from the recorded Apollo context:\n${formatFindingList(findings)}\n\nI would keep scheduled heartbeat locked until model auth, scheduled audit writes, runner secrets, and rate controls are approved.`;
   }
 
   if (lower.includes("next") || lower.includes("plan") || lower.includes("roadmap")) {
-    return `Apollo Chat context packs are active. My next recommendation is server-side model auth for those packs, then 13E background heartbeat.\n\nRoadmap:\n${context.roadmap.map((item) => `- ${item}`).join("\n")}`;
+    return `Apollo Chat context packs and memory are active. My next recommendation is server-side model auth, then approval for a scheduled heartbeat.\n\nRoadmap:\n${context.roadmap.map((item) => `- ${item}`).join("\n")}`;
   }
 
   if (lower.includes("audit") || lower.includes("history") || lower.includes("record")) {
     return `Audit history is active. I can see ${context.runs.length} recent Apollo runs with ${context.totalFindings} findings and ${context.approvalFindings} approval-gated findings. Latest run: ${latestRun?.summary ?? "none yet"}.`;
   }
 
-  return `I am online in grounded context-pack mode. I can see ${context.runs.length} recent Apollo audit runs, ${context.totalFindings} findings, and portal counts (${counts}). Context packs ready: ${context.summary.ready}; partial: ${context.summary.partial}. The safest next move is server-side model auth for these packs before any scheduled heartbeat.`;
+  return `I am online in grounded context-pack mode. I can see ${context.runs.length} recent Apollo audit runs, ${context.totalFindings} findings, and portal counts (${counts}). Context packs ready: ${context.summary.ready}; partial: ${context.summary.partial}. The safest next move is server-side model auth, then scheduled heartbeat approval.`;
 }
 
 function buildModelPrompt({ message, context, actor }) {

@@ -17,8 +17,14 @@ import {
   APOLLO_PRINCIPLES,
 } from "../data/apollo";
 import ApolloChat from "./ApolloChat";
+import ApolloMemory from "./ApolloMemory";
+import ApolloOperationsStatus from "./ApolloOperationsStatus";
 import { fetchApolloAuditHistory } from "../lib/apolloAudit";
-import { runApolloDepartmentReview, runApolloReadinessCheck } from "../lib/apolloRunner";
+import {
+  runApolloDepartmentReview,
+  runApolloHeartbeatDryRun,
+  runApolloReadinessCheck,
+} from "../lib/apolloRunner";
 
 const statusStyles = {
   Complete: "border-accent/30 bg-accent/10 text-accent",
@@ -303,7 +309,9 @@ export default function ApolloCommandCenter({
     try {
       const result = checkType === "departments"
         ? await runApolloDepartmentReview()
-        : await runApolloReadinessCheck();
+        : checkType === "heartbeat"
+          ? await runApolloHeartbeatDryRun()
+          : await runApolloReadinessCheck();
       setRunnerState({ status: "success", result, error: "", checkType });
       await loadAuditHistory(result.audit?.runId ?? "");
     } catch (error) {
@@ -366,10 +374,12 @@ export default function ApolloCommandCenter({
         <CommandMetric
           icon={Clock}
           label="Heartbeat"
-          value="Not armed"
-          detail="Scheduled runs come after the runner is secured."
+          value="Dry run only"
+          detail="Scheduled runs stay locked until the gates are approved."
         />
       </section>
+
+      <ApolloOperationsStatus />
 
       <section className="card p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -379,10 +389,10 @@ export default function ApolloCommandCenter({
               <h3 className="font-display font-bold">Server-side Runner</h3>
             </div>
             <p className="max-w-2xl text-sm leading-relaxed text-white/50">
-              Manual readiness and department reviews. Uses your head-coach session for protected audit writes, and keeps future scheduler secrets on the server.
+              Manual readiness, department reviews, and heartbeat dry-runs. Uses your head-coach session for protected audit writes, and keeps future scheduler secrets on the server.
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:min-w-[390px]">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:min-w-[560px]">
             <button
               type="button"
               onClick={() => runCheck("readiness")}
@@ -398,6 +408,14 @@ export default function ApolloCommandCenter({
               className="btn btn-secondary justify-center disabled:cursor-not-allowed disabled:opacity-60"
             >
               {runnerState.status === "loading" && runnerState.checkType === "departments" ? "Reviewing..." : "Run department review"}
+            </button>
+            <button
+              type="button"
+              onClick={() => runCheck("heartbeat")}
+              disabled={runnerState.status === "loading"}
+              className="btn btn-secondary justify-center disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {runnerState.status === "loading" && runnerState.checkType === "heartbeat" ? "Dry running..." : "Run heartbeat dry run"}
             </button>
           </div>
         </div>
@@ -449,6 +467,8 @@ export default function ApolloCommandCenter({
       </section>
 
       <ApolloChat onAuditRecorded={loadAuditHistory} />
+
+      <ApolloMemory />
 
       <ApolloAuditHistory
         auditState={auditState}

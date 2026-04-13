@@ -46,5 +46,6 @@ Apollo memory must be structured. It can store project facts, architecture decis
 1. Command foundation: charter, command center, approval model, audit schema.
 2. Server-side runner: protected endpoints, runner secret, narrow write paths.
 3. Department agents: Security, Cyber, and QA in read-only/report-only mode first; Performance, Product, and Drill Scout supervision later.
-4. Apollo chat: head-coach communication grounded in server-built context packs for guardrails, roadmap, audit, portal snapshot, memory, and approvals.
-5. Background heartbeat: scheduled and event-triggered checks with cost and scope controls.
+4. Apollo chat and memory: head-coach communication grounded in server-built context packs for guardrails, roadmap, audit, portal snapshot, editable memory, and approvals.
+5. Model access: server-only model reasoning after AI Gateway auth or Vercel OIDC is approved.
+6. Background heartbeat: manual dry-runs first; scheduled and event-triggered checks only after cost, frequency, env, and scope controls are approved.

@@ -6,7 +6,7 @@ const initialMessages = [
   {
     id: "apollo-intro",
     role: "assistant",
-    content: "Apollo chat is online. I can answer from server-built context packs; model-backed reasoning turns on only when the server AI Gateway key is configured.",
+    content: "Apollo chat is online. I can answer from server-built context packs and approved Apollo memory; model-backed reasoning turns on only when the server AI Gateway key is configured.",
     meta: "Grounded mode",
   },
 ];
@@ -126,7 +126,7 @@ export default function ApolloChat({ onAuditRecorded }) {
             <h3 className="font-display font-bold">Apollo Chat</h3>
           </div>
           <p className="max-w-2xl text-sm leading-relaxed text-white/50">
-            Ask Apollo about audit history, roadmap, and current agent guardrails. Responses use approved server context packs.
+            Ask Apollo about audit history, roadmap, memory, and current agent guardrails. Responses use approved server context packs.
           </p>
         </div>
         <div className="rounded-lg border border-accent/20 bg-accent/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-accent">

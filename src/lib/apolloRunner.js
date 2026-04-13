@@ -32,3 +32,7 @@ export function runApolloReadinessCheck() {
 export function runApolloDepartmentReview() {
   return runApolloCheck("department_review");
 }
+
+export function runApolloHeartbeatDryRun() {
+  return runApolloCheck("heartbeat");
+}

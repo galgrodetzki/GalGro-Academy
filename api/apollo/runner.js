@@ -11,10 +11,14 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
 
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RUNNER_SECRET = process.env.APOLLO_RUNNER_SECRET ?? process.env.CRON_SECRET;
-const MODEL_ACCESS_CONFIGURED = Boolean(
-  process.env.APOLLO_MODEL || process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY
-);
-const ALLOWED_RUN_TYPES = new Set(["readiness", "department_review"]);
+const HEARTBEAT_ENABLED = process.env.APOLLO_HEARTBEAT_ENABLED === "true";
+const MODEL_AUTH_MODE = process.env.AI_GATEWAY_API_KEY
+  ? "ai_gateway_key"
+  : process.env.VERCEL_OIDC_TOKEN
+    ? "vercel_oidc"
+    : "locked";
+const MODEL_ACCESS_CONFIGURED = MODEL_AUTH_MODE !== "locked";
+const ALLOWED_RUN_TYPES = new Set(["readiness", "department_review", "heartbeat"]);
 
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -141,7 +145,9 @@ function getRuntimeConfig(accessToken = "") {
     serviceRoleConfigured: Boolean(SERVICE_ROLE_KEY),
     manualAuditAvailable: Boolean(accessToken),
     runnerSecretConfigured: Boolean(RUNNER_SECRET),
+    heartbeatEnabled: HEARTBEAT_ENABLED,
     modelAccessConfigured: MODEL_ACCESS_CONFIGURED,
+    modelAuthMode: MODEL_AUTH_MODE,
   };
 }
 
@@ -197,10 +203,12 @@ function buildReadinessReport(actor, runType, accessToken) {
       severity: "info",
       category: "model_access",
       detail: MODEL_ACCESS_CONFIGURED
-        ? "A model access variable is present, but this runner does not call a model yet."
-        : "Apollo has no model access from this endpoint yet.",
-      recommendation: "Add model calls only after the audit tables and approval queue are working.",
-      approvalRequired: true,
+        ? `Apollo model calls can use the ${runtimeConfig.modelAuthMode} server path.`
+        : "Apollo has no AI Gateway auth or Vercel OIDC token available to this endpoint yet.",
+      recommendation: MODEL_ACCESS_CONFIGURED
+        ? "Keep model calls server-side and audit every response."
+        : "Add AI Gateway auth or Vercel OIDC before expecting model-backed Apollo chat.",
+      approvalRequired: !MODEL_ACCESS_CONFIGURED,
       agentKey: "apollo",
       agentName: "Apollo",
     },
@@ -246,6 +254,106 @@ async function buildDepartmentReport(actor, runType, accessToken) {
     agents: departmentReview.agents,
     tableChecks: departmentReview.tableChecks,
     findings: departmentReview.findings,
+  };
+}
+
+async function buildHeartbeatReport(actor, runType, accessToken) {
+  const runtimeConfig = getRuntimeConfig(accessToken);
+  const readClient = accessToken
+    ? makeSupabaseClient(SUPABASE_ANON_KEY, accessToken)
+    : SERVICE_ROLE_KEY
+      ? makeSupabaseClient(SERVICE_ROLE_KEY)
+      : null;
+  const departmentReview = await runDepartmentAgents({
+    supabase: readClient,
+    config: runtimeConfig,
+  });
+
+  const findings = [
+    {
+      title: actor.source === "runner_secret" ? "Scheduled heartbeat checkpoint completed" : "Manual heartbeat dry run completed",
+      severity: "info",
+      category: "heartbeat",
+      detail: actor.source === "runner_secret"
+        ? "Apollo ran a server-to-server read-only heartbeat checkpoint."
+        : "Apollo ran a head-coach-triggered dry run. This does not enable background scheduling.",
+      recommendation: "Keep heartbeat read-only until approval queue actions can be accepted or rejected in the app.",
+      approvalRequired: false,
+      agentKey: "apollo",
+      agentName: "Apollo",
+    },
+    {
+      title: runtimeConfig.heartbeatEnabled ? "Heartbeat schedule gate is enabled" : "Heartbeat schedule gate is locked",
+      severity: runtimeConfig.heartbeatEnabled ? "info" : "low",
+      category: "heartbeat_gate",
+      detail: runtimeConfig.heartbeatEnabled
+        ? "APOLLO_HEARTBEAT_ENABLED is set on the server."
+        : "APOLLO_HEARTBEAT_ENABLED is not set, so server-to-server heartbeat requests stay blocked.",
+      recommendation: runtimeConfig.heartbeatEnabled
+        ? "Only add a Vercel Cron schedule after confirming runner secret, service-role key, and rate controls."
+        : "Leave this locked until we are ready for scheduled background checks.",
+      approvalRequired: !runtimeConfig.heartbeatEnabled,
+      agentKey: "apollo",
+      agentName: "Apollo",
+    },
+    {
+      title: runtimeConfig.modelAccessConfigured ? "Model-backed chat path is ready" : "Model-backed chat path is locked",
+      severity: runtimeConfig.modelAccessConfigured ? "info" : "low",
+      category: "model_access",
+      detail: runtimeConfig.modelAccessConfigured
+        ? `Apollo can use ${runtimeConfig.modelAuthMode} for server-side model calls.`
+        : "No AI Gateway auth or Vercel OIDC token is available to the server runner.",
+      recommendation: runtimeConfig.modelAccessConfigured
+        ? "Keep responses grounded in context packs and audit metadata."
+        : "Use grounded context-pack mode until server-side model auth is configured.",
+      approvalRequired: !runtimeConfig.modelAccessConfigured,
+      agentKey: "apollo",
+      agentName: "Apollo",
+    },
+    ...departmentReview.findings,
+  ];
+
+  return {
+    summary: "Apollo heartbeat checkpoint completed in read-only mode.",
+    actor,
+    runType,
+    mode: actor.source === "runner_secret" ? "scheduled_read_only" : "manual_dry_run",
+    gates: [
+      "No autonomous production changes",
+      "No external tool calls",
+      "No browser-exposed service secrets",
+      "No model calls from this runner",
+      "Scheduled heartbeat remains blocked unless APOLLO_HEARTBEAT_ENABLED is true",
+    ],
+    agents: departmentReview.agents,
+    tableChecks: departmentReview.tableChecks,
+    findings,
+  };
+}
+
+function buildBlockedHeartbeatReport(actor, runType) {
+  return {
+    summary: "Apollo scheduled heartbeat blocked before execution.",
+    actor,
+    runType,
+    mode: "blocked",
+    gates: [
+      "No scheduled heartbeat without APOLLO_HEARTBEAT_ENABLED",
+      "No audit write attempted",
+      "No department agents executed",
+    ],
+    findings: [
+      {
+        title: "Scheduled heartbeat gate is locked",
+        severity: "medium",
+        category: "heartbeat_gate",
+        detail: "A server-to-server heartbeat request arrived, but APOLLO_HEARTBEAT_ENABLED is not true.",
+        recommendation: "Keep scheduled checks disabled until Gal approves the frequency, cost boundary, and server-only secrets.",
+        approvalRequired: true,
+        agentKey: "apollo",
+        agentName: "Apollo",
+      },
+    ],
   };
 }
 
@@ -317,14 +425,33 @@ async function handleRun(request) {
   if (!auth.ok) return json({ error: auth.error }, auth.status);
 
   const payload = request.method === "GET" ? {} : await readPayload(request);
-  const runType = typeof payload.runType === "string" ? payload.runType : "readiness";
+  const urlRunType = new URL(request.url).searchParams.get("runType");
+  const runType = typeof payload.runType === "string"
+    ? payload.runType
+    : urlRunType || (request.method === "GET" ? "heartbeat" : "readiness");
   if (!ALLOWED_RUN_TYPES.has(runType)) {
     return json({ error: "Apollo runner only accepts approved read-only checks right now." }, 400);
   }
 
+  if (runType === "heartbeat" && auth.actor.source === "runner_secret" && !HEARTBEAT_ENABLED) {
+    const report = buildBlockedHeartbeatReport(auth.actor, runType);
+    return json({
+      runner: "apollo",
+      status: "blocked",
+      audit: {
+        status: "not_armed",
+        runId: null,
+        message: "Scheduled heartbeat is blocked until APOLLO_HEARTBEAT_ENABLED is true.",
+      },
+      report,
+    }, 423);
+  }
+
   const report = runType === "department_review"
     ? await buildDepartmentReport(auth.actor, runType, auth.accessToken)
-    : buildReadinessReport(auth.actor, runType, auth.accessToken);
+    : runType === "heartbeat"
+      ? await buildHeartbeatReport(auth.actor, runType, auth.accessToken)
+      : buildReadinessReport(auth.actor, runType, auth.accessToken);
   const audit = await persistAuditRun(report, auth.actor, auth.accessToken);
 
   return json({

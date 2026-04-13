@@ -102,12 +102,18 @@ export const APOLLO_FOUNDATION_STEPS = [
     step: "13D",
     title: "Apollo Chat",
     status: "Foundation",
-    detail: "Head-coach chat now uses server-built context packs before broader agent autonomy.",
+    detail: "Head-coach chat uses server-built context packs and editable memory before broader agent autonomy.",
   },
   {
     step: "13E",
+    title: "Model Access",
+    status: "Foundation",
+    detail: "Server readiness status is visible. Model reasoning stays locked until AI Gateway auth or Vercel OIDC is approved.",
+  },
+  {
+    step: "13F",
     title: "Background Heartbeat",
     status: "Next",
-    detail: "Scheduled and event-triggered runs with cost, frequency, and scope controls.",
+    detail: "Manual heartbeat dry-runs are available; scheduled runs still need cost, frequency, env, and scope approval.",
   },
 ];

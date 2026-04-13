@@ -1,4 +1,4 @@
-const CONTEXT_PACK_VERSION = "13D.1";
+const CONTEXT_PACK_VERSION = "13F.0";
 const DEFAULT_MEMORY_SENSITIVITY = "internal";
 const MEMORY_SENSITIVITY_ORDER = ["public", "internal", "restricted"];
 const INCLUDE_RESTRICTED_CONTEXT = process.env.APOLLO_INCLUDE_RESTRICTED_CONTEXT === "true";
@@ -8,8 +8,9 @@ export const APOLLO_ROADMAP = [
   "13A Command Foundation: complete.",
   "13B Server-side Runner: foundation done; manual audit records are visible.",
   "13C Department Agents: foundation done for Security, Cyber, and QA in read-only mode.",
-  "13D Apollo Chat: context packs active; model-backed reasoning is server-gated.",
-  "13E Background Heartbeat: next, but still locked until scheduling, cost, scope, and server-only secrets are approved.",
+  "13D Apollo Chat: context packs and editable memory are active; model-backed reasoning is server-gated.",
+  "13E Model Access: server readiness status exists; waits for AI Gateway auth or Vercel OIDC approval.",
+  "13F Background Heartbeat: manual dry-run exists; scheduled runs stay locked until scheduling, cost, scope, and server-only secrets are approved.",
 ];
 
 function truncateText(value = "", maxLength = 420) {
@@ -103,10 +104,10 @@ function buildRoadmapPack() {
     key: "roadmap",
     title: "Apollo Roadmap",
     status: "ready",
-    summary: "Apollo Chat is the active checkpoint; background heartbeat stays locked until the server runner is fully gated.",
+    summary: "Apollo Chat and memory are active; heartbeat is dry-run only until the server runner is fully gated.",
     metrics: {
-      current: "13D",
-      next: "13E",
+      current: "13F",
+      next: "Model auth, then scheduled heartbeat approval",
     },
     items: APOLLO_ROADMAP,
   };
