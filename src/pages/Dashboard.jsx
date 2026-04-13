@@ -1,5 +1,19 @@
+import { useMemo } from "react";
 import { motion as Motion } from "framer-motion";
-import { BookOpen, Layers, Users, Calendar, Sparkles, CheckCircle2, UserCheck } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  Calendar,
+  CheckCircle2,
+  Layers,
+  Link2,
+  MessageSquareText,
+  Sparkles,
+  Target,
+  TrendingUp,
+  UserCheck,
+  Users,
+} from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import { DRILLS, CATEGORIES } from "../data/drills";
 import { useData } from "../context/DataContext";
@@ -12,6 +26,95 @@ const STAT_ACCENTS = {
   orange: "bg-orange/10 text-orange",
   "electric-purple": "bg-electric-purple/10 text-electric-purple",
 };
+
+const byUpcomingDate = (a, b) => (a.sessionDate || "9999-12-31") > (b.sessionDate || "9999-12-31") ? 1 : -1;
+const byRecentDate = (a, b) => (a.sessionDate || "") > (b.sessionDate || "") ? -1 : 1;
+
+const formatDate = (iso) =>
+  iso
+    ? new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+      })
+    : "No date set";
+
+function attendedSession(session, playerId) {
+  if (!Array.isArray(session.attendance) || session.attendance.length === 0) return true;
+  return session.attendance.includes(playerId);
+}
+
+function buildKeeperInsights({ currentPlayer, sessions, keeperNotes, allDrills }) {
+  if (!currentPlayer) {
+    return {
+      assigned: [],
+      upcoming: [],
+      completed: [],
+      attended: [],
+      reflections: [],
+      needsReflection: [],
+      topFocus: [],
+      recent: [],
+      attendanceRate: 0,
+      nextSession: null,
+      lastCompleted: null,
+    };
+  }
+
+  const drillMap = new Map(allDrills.map((drill) => [drill.id, drill]));
+  const categoryMap = new Map(CATEGORIES.map((cat) => [cat.key, cat]));
+  const assigned = sessions.filter((s) => s.playerIds?.includes(currentPlayer.id));
+  const upcoming = assigned
+    .filter((s) => s.status === "planned" || !s.status)
+    .sort(byUpcomingDate);
+  const completed = assigned
+    .filter((s) => s.status === "completed")
+    .sort(byRecentDate);
+  const attended = completed.filter((s) => attendedSession(s, currentPlayer.id));
+  const reflections = keeperNotes
+    .filter((note) => note.playerId === currentPlayer.id)
+    .sort((a, b) => (a.updatedAt || a.createdAt || "") > (b.updatedAt || b.createdAt || "") ? -1 : 1);
+  const reflectedSessionIds = new Set(reflections.map((note) => note.sessionId));
+  const needsReflection = attended
+    .filter((session) => !reflectedSessionIds.has(session.id))
+    .slice(0, 3);
+  const focusMap = new Map();
+
+  attended.forEach((session) => {
+    session.blocks?.forEach((block) => {
+      const drill = drillMap.get(block.drillId);
+      if (!drill) return;
+      const previous = focusMap.get(drill.cat) ?? { key: drill.cat, minutes: 0, blocks: 0 };
+      focusMap.set(drill.cat, {
+        ...previous,
+        minutes: previous.minutes + Number(block.actualDur ?? block.dur ?? 0),
+        blocks: previous.blocks + 1,
+      });
+    });
+  });
+
+  const topFocus = [...focusMap.values()]
+    .map((item) => ({
+      ...item,
+      label: categoryMap.get(item.key)?.label ?? item.key,
+      color: categoryMap.get(item.key)?.color ?? "#00e87a",
+    }))
+    .sort((a, b) => b.minutes - a.minutes)
+    .slice(0, 3);
+  const recent = [...assigned].sort(byRecentDate);
+
+  return {
+    assigned: recent,
+    upcoming,
+    completed,
+    attended,
+    reflections,
+    needsReflection,
+    topFocus,
+    recent: recent.slice(0, 5),
+    attendanceRate: completed.length ? Math.round((attended.length / completed.length) * 100) : 0,
+    nextSession: upcoming[0] ?? null,
+    lastCompleted: completed[0] ?? null,
+  };
+}
 
 function StatCard({ icon: Icon, value, label, accent = "accent", gradient }) {
   return (
@@ -30,23 +133,17 @@ function StatCard({ icon: Icon, value, label, accent = "accent", gradient }) {
 }
 
 export default function Dashboard({ setPage }) {
-  const { sessions: savedSessions, players, customDrills, currentPlayer } = useData();
-  const totalDrills = DRILLS.length + customDrills.length;
+  const { sessions: savedSessions, players, customDrills, currentPlayer, keeperNotes } = useData();
+  const allDrills = useMemo(() => [...DRILLS, ...customDrills], [customDrills]);
+  const totalDrills = allDrills.length;
   const totalCategories = CATEGORIES.length;
   const { profile, isKeeper, canEdit } = useAuth();
   const memberName = profile?.name ?? "Coach";
-  const keeperSessions = currentPlayer
-    ? savedSessions.filter((s) => s.playerIds?.includes(currentPlayer.id))
-    : [];
-  const keeperUpcoming = keeperSessions.filter((s) => s.status === "planned" || !s.status);
-  const keeperCompleted = keeperSessions.filter((s) => s.status === "completed");
-  const keeperAttended = keeperCompleted.filter((s) => {
-    if (!Array.isArray(s.attendance) || s.attendance.length === 0) return true;
-    return s.attendance.includes(currentPlayer.id);
-  });
-  const attendanceRate = keeperCompleted.length
-    ? Math.round((keeperAttended.length / keeperCompleted.length) * 100)
-    : 0;
+  const keeperInsights = useMemo(
+    () => buildKeeperInsights({ currentPlayer, sessions: savedSessions, keeperNotes, allDrills }),
+    [allDrills, currentPlayer, keeperNotes, savedSessions],
+  );
+  const { upcoming: keeperUpcoming, completed: keeperCompleted, attendanceRate } = keeperInsights;
   const primaryAction = canEdit
     ? { page: "builder", label: "Start Building", icon: Layers }
     : { page: "sessions", label: "View Sessions", icon: Calendar };
@@ -158,6 +255,14 @@ export default function Dashboard({ setPage }) {
         )}
       </Motion.div>
 
+      {isKeeper && (
+        <KeeperPortal
+          currentPlayer={currentPlayer}
+          insights={keeperInsights}
+          setPage={setPage}
+        />
+      )}
+
       {/* Quick actions grid */}
       <Motion.div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4" variants={staggerContainer} initial="initial" animate="animate">
         <QuickActionCard
@@ -195,6 +300,233 @@ export default function Dashboard({ setPage }) {
           />
         )}
       </Motion.div>
+    </div>
+  );
+}
+
+function KeeperPortal({ currentPlayer, insights, setPage }) {
+  if (!currentPlayer) {
+    return (
+      <Motion.section className="mb-6" {...heroPanelMotion}>
+        <div className="card border-electric/25 bg-electric/5 p-5 md:p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="h-11 w-11 rounded-lg border border-electric/30 bg-electric/10 flex items-center justify-center shrink-0">
+                <Link2 size={19} className="text-electric" />
+              </div>
+              <div>
+                <div className="brand-overline mb-2">Keeper profile</div>
+                <h3 className="font-display text-xl font-bold">Roster link needed</h3>
+                <p className="mt-1 max-w-2xl text-sm text-white/55">
+                  Your account is active, but it is not linked to a roster profile yet. Once a coach links it, your assigned sessions, attendance, and reflections will appear here.
+                </p>
+              </div>
+            </div>
+            <Motion.button onClick={() => setPage("sessions")} whileTap={softTap} className="btn btn-secondary md:shrink-0">
+              Check sessions <ArrowRight size={14} />
+            </Motion.button>
+          </div>
+        </div>
+      </Motion.section>
+    );
+  }
+
+  const focusTotal = insights.topFocus.reduce((sum, item) => sum + item.minutes, 0);
+
+  return (
+    <section className="mb-6">
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="brand-overline mb-2">Keeper hub</div>
+          <h3 className="font-display text-xl font-bold">Personal training picture</h3>
+        </div>
+        <p className="max-w-xl text-xs text-white/45 sm:text-right">
+          Built from your assigned sessions, attendance, and keeper reflections.
+        </p>
+      </div>
+
+      <Motion.div
+        className="grid grid-cols-1 gap-3 lg:grid-cols-3"
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+      >
+        <KeeperProfileCard currentPlayer={currentPlayer} insights={insights} setPage={setPage} />
+        <ReflectionQueueCard insights={insights} setPage={setPage} />
+        <TrainingFocusCard insights={insights} focusTotal={focusTotal} />
+        <RecentKeeperWorkCard insights={insights} setPage={setPage} />
+      </Motion.div>
+    </section>
+  );
+}
+
+function KeeperProfileCard({ currentPlayer, insights, setPage }) {
+  return (
+    <Motion.div className="card p-5 lg:col-span-2" variants={staggerItem} whileHover={softCardHover}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-white/35">Linked roster profile</div>
+          <h4 className="font-display text-2xl font-bold mt-1">{currentPlayer.name}</h4>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className="tag bg-accent/10 text-accent border border-accent/20">{currentPlayer.position}</span>
+            {currentPlayer.dominantFoot && (
+              <span className="tag bg-bg-card2 border border-bg-border text-white/60">{currentPlayer.dominantFoot} foot</span>
+            )}
+          </div>
+        </div>
+        <Motion.button onClick={() => setPage("sessions")} whileTap={softTap} className="btn btn-secondary sm:shrink-0">
+          Open sessions <ArrowRight size={14} />
+        </Motion.button>
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <KeeperSignal
+          icon={Calendar}
+          label="Next session"
+          title={insights.nextSession?.name ?? "Nothing scheduled"}
+          detail={insights.nextSession ? formatDate(insights.nextSession.sessionDate) : "Your next assigned session will appear here."}
+          accent={!!insights.nextSession}
+        />
+        <KeeperSignal
+          icon={CheckCircle2}
+          label="Latest completed"
+          title={insights.lastCompleted?.name ?? "No completed sessions"}
+          detail={insights.lastCompleted ? formatDate(insights.lastCompleted.sessionDate) : "Completed work will build your training history."}
+          accent={!!insights.lastCompleted}
+        />
+      </div>
+    </Motion.div>
+  );
+}
+
+function ReflectionQueueCard({ insights, setPage }) {
+  return (
+    <Motion.div className="card p-5" variants={staggerItem} whileHover={softCardHover}>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-white/35">Reflection queue</div>
+          <h4 className="font-display text-xl font-bold mt-1">{insights.needsReflection.length} to review</h4>
+        </div>
+        <div className="h-10 w-10 rounded-lg border border-accent/20 bg-accent/10 flex items-center justify-center shrink-0">
+          <MessageSquareText size={18} className="text-accent" />
+        </div>
+      </div>
+
+      {insights.needsReflection.length > 0 ? (
+        <div className="space-y-3">
+          {insights.needsReflection.map((session) => (
+            <div key={session.id} className="border-t border-bg-border pt-3 first:border-t-0 first:pt-0">
+              <div className="truncate text-sm font-semibold">{session.name}</div>
+              <div className="mt-0.5 text-xs text-white/40">{formatDate(session.sessionDate)}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-white/50">
+          You are caught up. Completed sessions that need your reflection will land here.
+        </p>
+      )}
+
+      <Motion.button onClick={() => setPage("sessions")} whileTap={softTap} className="btn btn-primary mt-5 w-full justify-center">
+        Add reflection <ArrowRight size={14} />
+      </Motion.button>
+    </Motion.div>
+  );
+}
+
+function TrainingFocusCard({ insights, focusTotal }) {
+  return (
+    <Motion.div className="card p-5" variants={staggerItem} whileHover={softCardHover}>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-white/35">Training focus</div>
+          <h4 className="font-display text-xl font-bold mt-1">Recent mix</h4>
+        </div>
+        <Target size={19} className="text-electric" />
+      </div>
+
+      {insights.topFocus.length > 0 ? (
+        <div className="space-y-4">
+          {insights.topFocus.map((focus) => {
+            const percent = focusTotal ? Math.max(8, Math.round((focus.minutes / focusTotal) * 100)) : 0;
+            return (
+              <div key={focus.key}>
+                <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+                  <span className="font-semibold text-white/75">{focus.label}</span>
+                  <span className="text-white/35">{focus.minutes} min</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-bg-soft">
+                  <div className="h-full rounded-full" style={{ width: `${percent}%`, backgroundColor: focus.color }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-white/50">
+          Complete attended sessions to build your training-focus breakdown.
+        </p>
+      )}
+    </Motion.div>
+  );
+}
+
+function RecentKeeperWorkCard({ insights, setPage }) {
+  return (
+    <Motion.div className="card p-5 lg:col-span-2" variants={staggerItem} whileHover={softCardHover}>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wide text-white/35">Recent work</div>
+          <h4 className="font-display text-xl font-bold mt-1">Your session timeline</h4>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-white/45">
+          <TrendingUp size={15} className="text-accent" />
+          {insights.reflections.length} reflection{insights.reflections.length === 1 ? "" : "s"} saved
+        </div>
+      </div>
+
+      {insights.recent.length > 0 ? (
+        <div className="space-y-3">
+          {insights.recent.map((session) => {
+            const completed = session.status === "completed";
+            return (
+              <div key={session.id} className="flex items-start gap-3 border-t border-bg-border pt-3 first:border-t-0 first:pt-0">
+                <span className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${completed ? "bg-emerald-400" : "bg-accent"}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{session.name}</div>
+                  <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/40">
+                    <span>{formatDate(session.sessionDate)}</span>
+                    <span>{session.totalDuration} min</span>
+                    <span>{session.blocks.length} drills</span>
+                  </div>
+                </div>
+                <span className={`text-[10px] font-bold uppercase tracking-wide ${completed ? "text-emerald-400" : "text-accent"}`}>
+                  {completed ? "Done" : "Upcoming"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-white/50">Assigned sessions will appear here once your coach adds you to a session.</p>
+      )}
+
+      <Motion.button onClick={() => setPage("sessions")} whileTap={softTap} className="btn btn-secondary mt-5">
+        View full history <ArrowRight size={14} />
+      </Motion.button>
+    </Motion.div>
+  );
+}
+
+function KeeperSignal({ icon: Icon, label, title, detail, accent }) {
+  return (
+    <div className="rounded-lg bg-bg-soft/80 p-4">
+      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
+        <Icon size={13} className={accent ? "text-accent" : "text-white/35"} />
+        {label}
+      </div>
+      <div className="truncate text-sm font-bold">{title}</div>
+      <div className="mt-1 text-xs text-white/45">{detail}</div>
     </div>
   );
 }

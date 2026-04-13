@@ -4,7 +4,7 @@ import { useScrollLock } from "../hooks/useScrollLock";
 import {
   Calendar, Clock, Trash2, Eye, Layers,
   CheckCircle2, CalendarDays, PenLine, X, Save, Users,
-  FileDown, UserCheck,
+  FileDown, MessageSquareText, UserCheck,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import CategoryIcon from "../components/CategoryIcon";
@@ -216,6 +216,13 @@ export default function MySessions() {
               players={players}
               drills={allDrills}
               canEdit={canEdit}
+              reflectionStatus={
+                canSaveKeeperReflection(s)
+                  ? keeperNotes.some((note) => note.sessionId === s.id && note.playerId === currentPlayer?.id)
+                    ? "saved"
+                    : "needed"
+                  : null
+              }
               onView={() => setViewingId(s.id)}
               onDelete={() => removeSession(s.id)}
               onMarkCompleted={() => markCompleted(s.id)}
@@ -544,11 +551,25 @@ function TabBtn({ active, onClick, children }) {
   );
 }
 
-function SessionCard({ session: s, tab, players = [], drills = [], canEdit, onView, onDelete, onMarkCompleted, onRecap }) {
+function SessionCard({ session: s, tab, players = [], drills = [], canEdit, reflectionStatus, onView, onDelete, onMarkCompleted, onRecap }) {
+  const ViewIcon = reflectionStatus === "needed" ? MessageSquareText : Eye;
+  const viewLabel = reflectionStatus === "needed" ? "Reflect" : "View";
+
   return (
     <div className="card card-hover p-4">
       <div className="min-w-0 mb-2">
-        <h3 className="font-display font-bold text-base truncate">{s.name}</h3>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-display font-bold text-base truncate">{s.name}</h3>
+          {reflectionStatus && (
+            <span className={`tag border shrink-0 normal-case tracking-normal ${
+              reflectionStatus === "needed"
+                ? "bg-orange/10 text-orange border-orange/20"
+                : "bg-accent/10 text-accent border-accent/20"
+            }`}>
+              {reflectionStatus === "needed" ? "Reflection needed" : "Reflection saved"}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2 text-[11px] mt-1">
           <span className={`flex items-center gap-1 font-semibold ${s.status === "completed" ? "text-emerald-400" : "text-accent"}`}>
             <Calendar size={10} /> {formatDate(s.sessionDate)}
@@ -593,7 +614,7 @@ function SessionCard({ session: s, tab, players = [], drills = [], canEdit, onVi
 
       <div className="flex items-center gap-2 pt-3 border-t border-bg-border">
         <button onClick={onView} className="btn btn-secondary flex-1 py-1.5 text-xs">
-          <Eye size={12} /> View
+          <ViewIcon size={12} /> {viewLabel}
         </button>
         {canEdit && tab === "upcoming" && (
           <button
