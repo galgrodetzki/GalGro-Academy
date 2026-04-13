@@ -11,7 +11,7 @@ export default function MobileHeader({ onOpenSettings }) {
     <header className="md:hidden fixed top-0 left-0 right-0 z-40 bg-bg-soft/95 backdrop-blur-lg border-b border-bg-border pt-[env(safe-area-inset-top)]">
       <div className="flex items-center justify-between px-4 h-14">
         {/* Logo */}
-        <BrandMark className="gap-2.5" glyphClassName="h-9 w-9" textSize="text-[13px]" />
+        <BrandMark className="gap-2.5" glyphClassName="h-9 w-9" textSize="text-[13px]" compact />
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
@@ -30,7 +30,7 @@ export default function MobileHeader({ onOpenSettings }) {
             <LogOut size={20} />
           </button>
           {/* Avatar */}
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-electric flex items-center justify-center text-xs font-black text-black ml-1">
+          <div className="w-8 h-8 rounded-lg border border-accent/30 bg-accent/10 flex items-center justify-center text-xs font-black text-accent ml-1">
             {initials}
           </div>
         </div>

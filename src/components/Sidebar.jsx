@@ -35,9 +35,9 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
   const navItems = canEdit ? NAV : NAV.filter(({ key }) => key !== "builder" && key !== "players");
 
   return (
-    <aside className="hidden md:flex fixed left-0 top-0 h-screen w-60 bg-bg-soft border-r border-bg-border flex-col p-4 z-40">
+    <aside className="hidden md:flex fixed left-0 top-0 h-screen w-60 bg-bg-soft/95 border-r border-bg-border flex-col p-4 z-40">
       {/* Logo */}
-      <BrandMark className="px-3 py-4 mb-6" glyphClassName="h-10 w-10" />
+      <BrandMark className="px-3 py-4 mb-5 border-b border-bg-border/70" glyphClassName="h-10 w-10" />
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1 flex-1">
@@ -50,7 +50,7 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
               onClick={() => setPage(key)}
               className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left ${
                 active
-                  ? "bg-gradient-to-r from-accent/15 to-electric/5 text-accent border border-accent/20"
+                  ? "bg-accent/10 text-accent border border-accent/25 shadow-[inset_3px_0_0_rgba(0,232,122,0.95)]"
                   : "text-white/50 hover:text-white hover:bg-bg-card"
               }`}
             >
@@ -76,7 +76,7 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
             onClick={() => setPage("admin")}
             className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left ${
               page === "admin"
-                ? "bg-gradient-to-r from-accent/15 to-electric/5 text-accent border border-accent/20"
+                ? "bg-accent/10 text-accent border border-accent/25 shadow-[inset_3px_0_0_rgba(0,232,122,0.95)]"
                 : "text-white/50 hover:text-white hover:bg-bg-card"
             }`}
           >
@@ -108,7 +108,7 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
           <span>Sign out</span>
         </button>
         <div className="flex items-center gap-3 px-3 py-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent to-electric flex items-center justify-center text-sm font-black text-black flex-shrink-0">
+          <div className="w-9 h-9 rounded-lg border border-accent/30 bg-accent/10 flex items-center justify-center text-sm font-black text-accent flex-shrink-0">
             {initials}
           </div>
           <div className="min-w-0">

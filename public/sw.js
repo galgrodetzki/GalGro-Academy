@@ -1,4 +1,4 @@
-const CACHE_NAME = "galgro-academy-v2";
+const CACHE_NAME = "galgro-academy-v3";
 const STATIC_SHELL = [
   "/",
   "/manifest.webmanifest",

@@ -58,10 +58,9 @@ export default function Dashboard({ setPage }) {
       />
 
       {/* Hero banner */}
-      <div className="card p-5 md:p-6 mb-5 md:mb-6 relative overflow-hidden bg-gradient-to-br from-bg-card via-bg-card to-bg-card2 border-accent/20">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
-        <div className="relative">
-          <div className="flex items-center gap-2 text-accent text-[11px] md:text-xs font-bold uppercase tracking-widest mb-2">
+      <div className="academy-panel p-5 md:p-6 mb-5 md:mb-6">
+        <div className="relative z-10">
+          <div className="brand-overline mb-3">
             <Sparkles size={14} />
             Welcome to GalGro's Academy
           </div>

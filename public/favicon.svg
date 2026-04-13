@@ -1,16 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
   <title id="title">GalGro's Academy</title>
   <defs>
-    <linearGradient id="g" x1="12" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+    <linearGradient id="crest" x1="14" y1="8" x2="50" y2="57" gradientUnits="userSpaceOnUse">
       <stop stop-color="#00e87a"/>
       <stop offset="1" stop-color="#4d8fff"/>
     </linearGradient>
+    <linearGradient id="field" x1="20" y1="17" x2="44" y2="47" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b0e17" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#111520" stop-opacity=".78"/>
+    </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#111520"/>
-  <rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="#2a3048" stroke-width="2"/>
-  <path d="M32 8 51 16v16.7c0 12.1-7.7 20.4-19 24.8-11.3-4.4-19-12.7-19-24.8V16L32 8Z" fill="url(#g)"/>
-  <path d="M21 24h22v15H21V24Zm0 5h22M28 24v15M36 24v15" fill="none" stroke="#0b0e17" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M24 45c3.1-3.6 5.9-5.4 8.4-5.4 2.4 0 5.1 1.8 8.1 5.4" fill="none" stroke="#0b0e17" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="32" cy="33" r="4.3" fill="#0b0e17"/>
-  <circle cx="32" cy="33" r="1.4" fill="#00e87a"/>
+  <rect width="64" height="64" rx="12" fill="#0b0e17"/>
+  <rect x="1" y="1" width="62" height="62" rx="11" fill="#111520" stroke="#2a3048" stroke-width="1.5"/>
+  <path d="M10 18h44M10 46h44M32 9v46" stroke="#25304a" stroke-width="1" stroke-linecap="round" opacity=".72"/>
+  <path d="M32 7.5 51 16v15.6c0 12.2-7.5 20.5-19 25.1-11.5-4.6-19-12.9-19-25.1V16l19-8.5Z" fill="url(#crest)"/>
+  <path d="M32 12.4 46.4 18.7v12.1c0 8.7-5.5 15.3-14.4 19.3-8.9-4-14.4-10.6-14.4-19.3V18.7L32 12.4Z" fill="url(#field)"/>
+  <path d="M22.8 23.4h18.4v12.7H22.8V23.4Zm0 4.4h18.4M28.9 23.4v12.7M35.1 23.4v12.7" fill="none" stroke="#00e87a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M24.8 42.5c2.7-3.2 5.1-4.8 7.3-4.8 2.1 0 4.5 1.6 7.1 4.8" fill="none" stroke="#4d8fff" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="32" cy="31.4" r="3.6" fill="#00e87a"/>
+  <circle cx="32" cy="31.4" r="1.35" fill="#0b0e17"/>
 </svg>

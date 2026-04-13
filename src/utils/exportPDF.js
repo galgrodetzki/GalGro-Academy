@@ -3,6 +3,7 @@ import jsPDF from "jspdf";
 // ── Dark-mode palette ──────────────────────────────────────────────────────
 const D = {
   ACCENT: [0, 255, 135],
+  ELECTRIC: [77, 143, 255],
   BG: [10, 10, 20],
   CARD: [18, 18, 35],
   MUTED: [120, 120, 150],
@@ -19,6 +20,7 @@ const D = {
 // ── Light-mode (print-friendly) palette ───────────────────────────────────
 const L = {
   ACCENT: [0, 155, 85],      // darker green, prints well
+  ELECTRIC: [37, 99, 235],
   BG: [255, 255, 255],
   CARD: [245, 246, 250],
   MUTED: [100, 110, 130],
@@ -123,14 +125,30 @@ export function exportSessionPDF(
     doc.setDrawColor(...border);
     doc.setLineWidth(0.25);
     doc.roundedRect(x, markY, size, size, 1.1, 1.1, "S");
+    doc.setDrawColor(...border);
+    doc.setLineWidth(0.12);
+    doc.line(x + size * 0.16, markY + size * 0.3, x + size * 0.84, markY + size * 0.3);
+    doc.line(x + size * 0.16, markY + size * 0.72, x + size * 0.84, markY + size * 0.72);
+    doc.line(x + size * 0.5, markY + size * 0.14, x + size * 0.5, markY + size * 0.86);
     doc.setFillColor(...C.ACCENT);
-    doc.roundedRect(x + size * 0.18, markY + size * 0.16, size * 0.64, size * 0.7, 0.9, 0.9, "F");
+    doc.roundedRect(x + size * 0.18, markY + size * 0.12, size * 0.64, size * 0.76, 0.9, 0.9, "F");
+    doc.setFillColor(...dark);
+    doc.roundedRect(x + size * 0.27, markY + size * 0.26, size * 0.46, size * 0.5, 0.65, 0.65, "F");
     doc.setDrawColor(...dark);
     doc.setLineWidth(0.45);
-    doc.rect(x + size * 0.31, markY + size * 0.36, size * 0.38, size * 0.26, "S");
-    doc.line(x + size * 0.31, markY + size * 0.45, x + size * 0.69, markY + size * 0.45);
-    doc.line(x + size * 0.5, markY + size * 0.36, x + size * 0.5, markY + size * 0.62);
-    doc.circle(x + size * 0.5, markY + size * 0.55, size * 0.08, "F");
+    doc.setDrawColor(...C.ACCENT);
+    doc.setLineWidth(0.38);
+    doc.rect(x + size * 0.33, markY + size * 0.37, size * 0.34, size * 0.23, "S");
+    doc.line(x + size * 0.33, markY + size * 0.45, x + size * 0.67, markY + size * 0.45);
+    doc.line(x + size * 0.5, markY + size * 0.37, x + size * 0.5, markY + size * 0.6);
+    doc.setDrawColor(...C.ELECTRIC);
+    doc.setLineWidth(0.45);
+    doc.line(x + size * 0.36, markY + size * 0.74, x + size * 0.5, markY + size * 0.67);
+    doc.line(x + size * 0.5, markY + size * 0.67, x + size * 0.64, markY + size * 0.74);
+    doc.setFillColor(...C.ACCENT);
+    doc.circle(x + size * 0.5, markY + size * 0.53, size * 0.075, "F");
+    doc.setFillColor(...dark);
+    doc.circle(x + size * 0.5, markY + size * 0.53, size * 0.027, "F");
   };
 
   // ── HEADER ────────────────────────────────────────────────────────────────

@@ -1,15 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
   <title id="title">GalGro's Academy</title>
   <defs>
-    <linearGradient id="g" x1="112" y1="76" x2="430" y2="442" gradientUnits="userSpaceOnUse">
+    <linearGradient id="crest" x1="120" y1="74" x2="406" y2="454" gradientUnits="userSpaceOnUse">
       <stop stop-color="#00e87a"/>
       <stop offset="1" stop-color="#4d8fff"/>
     </linearGradient>
+    <linearGradient id="field" x1="166" y1="138" x2="354" y2="386" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b0e17" stop-opacity=".96"/>
+      <stop offset="1" stop-color="#111520" stop-opacity=".8"/>
+    </linearGradient>
   </defs>
-  <rect width="512" height="512" fill="#111520"/>
-  <path d="M256 70 414 137v139c0 100.7-64 169.7-158 206.3C162 445.7 98 376.7 98 276V137L256 70Z" fill="url(#g)"/>
-  <path d="M165 196h182v125H165V196Zm0 42h182M223 196v125M289 196v125" fill="none" stroke="#0b0e17" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M190 374c25.7-30 49-45 69.8-45 20 0 42.4 15 67.2 45" fill="none" stroke="#0b0e17" stroke-width="25" stroke-linecap="round"/>
-  <circle cx="256" cy="270" r="35" fill="#0b0e17"/>
-  <circle cx="256" cy="270" r="12" fill="#00e87a"/>
+  <rect width="512" height="512" fill="#0b0e17"/>
+  <path d="M64 142h384M64 370h384M256 58v396" stroke="#25304a" stroke-width="10" stroke-linecap="round" opacity=".76"/>
+  <path d="M256 68 418 138v133c0 104-64.5 174-162 213-97.5-39-162-109-162-213V138L256 68Z" fill="url(#crest)"/>
+  <path d="M256 111.5 378 164v101c0 73-47 128.5-122 162-75-33.5-122-89-122-162V164l122-52.5Z" fill="url(#field)"/>
+  <path d="M178 194h156v107H178V194Zm0 37h156M230 194v107M282 194v107" fill="none" stroke="#00e87a" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M195 354c23-27 43.5-40.5 62-40.5 18 0 38 13.5 60 40.5" fill="none" stroke="#4d8fff" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="256" cy="262" r="30" fill="#00e87a"/>
+  <circle cx="256" cy="262" r="11" fill="#0b0e17"/>
 </svg>

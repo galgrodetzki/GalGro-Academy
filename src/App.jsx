@@ -6,7 +6,7 @@ import Sidebar from "./components/Sidebar";
 import BottomNav from "./components/BottomNav";
 import MobileHeader from "./components/MobileHeader";
 import SettingsModal from "./components/SettingsModal";
-import BrandMark from "./components/BrandMark";
+import BrandMark, { BrandGlyph } from "./components/BrandMark";
 import { pageMotion } from "./utils/motion";
 
 const Login = lazy(() => import("./pages/Login"));
@@ -21,7 +21,7 @@ function LoadingState({ label = "Loading academy..." }) {
   return (
     <div className="min-h-[45vh] flex items-center justify-center">
       <div className="flex flex-col items-center gap-4">
-        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        <BrandGlyph className="h-10 w-10 animate-pulse" title="Loading GalGro's Academy" />
         <p className="text-white/40 text-sm">{label}</p>
       </div>
     </div>

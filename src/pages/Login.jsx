@@ -99,21 +99,40 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12">
-      {/* Background glows */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-accent/6 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-electric/5 rounded-full blur-3xl" />
-      </div>
+    <div className="min-h-screen flex items-center justify-center px-4 py-6 md:py-10">
+      <div className="grid w-full max-w-5xl overflow-hidden rounded-lg border border-bg-border bg-bg-soft/95 shadow-2xl lg:grid-cols-[1.08fr_0.92fr]">
+        <section className="academy-panel min-h-[280px] p-6 md:min-h-[620px] md:p-10">
+          <div className="relative z-10 flex h-full flex-col justify-between">
+            <BrandMark glyphClassName="h-12 w-12" textSize="text-xl" />
+            <div className="max-w-md">
+              <div className="brand-overline mb-4">Goalkeeper portal</div>
+              <h1 className="font-display text-3xl font-bold leading-tight tracking-tight md:text-5xl">
+                Private academy workspace.
+              </h1>
+              <p className="mt-4 max-w-sm text-sm leading-6 text-white/60">
+                Sessions, keeper notes, and drill work stay inside GalGro's Academy.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">
+              <span className="border-t border-accent/40 pt-3">Plan</span>
+              <span className="border-t border-electric/40 pt-3">Train</span>
+              <span className="border-t border-white/20 pt-3">Review</span>
+            </div>
+          </div>
+        </section>
 
-      <div className="relative w-full max-w-sm">
-        {/* Logo */}
-        <BrandMark className="mb-8 justify-center" glyphClassName="h-12 w-12" textSize="text-xl" />
+        <section className="p-5 md:p-8 lg:p-10">
+          <div className="mb-6">
+            <div className="brand-overline mb-3">Secure access</div>
+            <h2 className="font-display text-2xl font-bold tracking-tight">
+              {mode === "signin" ? "Sign in to the academy" : "Create your academy account"}
+            </h2>
+            <p className="mt-1 text-sm text-white/45">Private access only.</p>
+          </div>
 
-        {/* Card */}
-        <div className="card p-6">
+          <div className="rounded-lg border border-bg-border bg-bg-card/90 p-5 md:p-6">
           {/* Tab switcher */}
-          <div className="flex bg-bg-soft border border-bg-border rounded-xl p-1 mb-6">
+          <div className="flex bg-bg-soft border border-bg-border rounded-lg p-1 mb-6">
             <button
               onClick={() => { setMode("signin"); setError(""); setInfo(""); }}
               className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-colors ${
@@ -235,11 +254,12 @@ export default function Login() {
               </button>
             </form>
           )}
-        </div>
+            </div>
 
-        <p className="text-center text-xs text-white/20 mt-6">
-          GalGro's Academy · Private access only
-        </p>
+            <p className="text-center text-xs text-white/20 mt-6">
+              GalGro's Academy · Private access only
+            </p>
+        </section>
       </div>
     </div>
   );
