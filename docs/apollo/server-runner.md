@@ -48,6 +48,8 @@ The runner is the protected server layer for Apollo. It is intentionally limited
 8. Use manual heartbeat dry-run to verify the department-agent reports before scheduled runs.
 9. Add a real cron schedule only after `APOLLO_HEARTBEAT_ENABLED`, the runner secret, service-role audit writes, cost controls, and frequency are approved.
 
+See `docs/apollo/model-access.md` before enabling model-backed Apollo Chat.
+
 ## Security rules
 
 - Browser code only sends the signed-in Supabase session token for manual checks.
