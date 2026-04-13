@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Bot, Send, Shield } from "lucide-react";
+import { Bot, Layers, Send, Shield } from "lucide-react";
 import { sendApolloChatMessage } from "../lib/apolloChat";
 
 const initialMessages = [
   {
     id: "apollo-intro",
     role: "assistant",
-    content: "Apollo chat is online. I can answer from audit history and roadmap context; model-backed reasoning turns on only when the server AI Gateway key is configured.",
+    content: "Apollo chat is online. I can answer from server-built context packs; model-backed reasoning turns on only when the server AI Gateway key is configured.",
     meta: "Grounded mode",
   },
 ];
@@ -44,11 +44,46 @@ function MessageBubble({ message }) {
   );
 }
 
+const packStatusStyles = {
+  ready: "border-accent/20 bg-accent/10 text-accent",
+  partial: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
+};
+
+function ContextPackStatus({ context }) {
+  if (!context?.packs?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-bg-border bg-bg-soft p-3">
+      <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
+          <Layers size={13} className="text-electric" />
+          Context packs
+        </div>
+        <div className="text-[11px] font-semibold text-white/40">
+          {context.summary?.ready ?? 0} ready / {context.summary?.partial ?? 0} partial
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {context.packs.map((pack) => (
+          <span
+            key={pack.key}
+            className={`tag border normal-case tracking-normal ${packStatusStyles[pack.status] ?? "border-bg-border bg-bg-card2 text-white/50"}`}
+            title={pack.summary}
+          >
+            {pack.title}: {pack.status}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ApolloChat({ onAuditRecorded }) {
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
+  const [contextSummary, setContextSummary] = useState(null);
 
   const sendMessage = async (event) => {
     event.preventDefault();
@@ -64,7 +99,8 @@ export default function ApolloChat({ onAuditRecorded }) {
       const response = await sendApolloChatMessage(cleanDraft);
       const modeLabel = response.mode === "model"
         ? `Model: ${response.model}`
-        : "Grounded fallback";
+        : "Grounded packs";
+      setContextSummary(response.context ?? null);
       setMessages((current) => [
         ...current,
         createMessage("assistant", response.reply, `${modeLabel} / audit ${response.audit?.status ?? "unknown"}`),
@@ -90,7 +126,7 @@ export default function ApolloChat({ onAuditRecorded }) {
             <h3 className="font-display font-bold">Apollo Chat</h3>
           </div>
           <p className="max-w-2xl text-sm leading-relaxed text-white/50">
-            Ask Apollo about audit history, roadmap, and current agent guardrails. Responses stay grounded in approved context.
+            Ask Apollo about audit history, roadmap, and current agent guardrails. Responses use approved server context packs.
           </p>
         </div>
         <div className="rounded-lg border border-accent/20 bg-accent/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-accent">
@@ -120,6 +156,8 @@ export default function ApolloChat({ onAuditRecorded }) {
             {error}
           </div>
         )}
+
+        <ContextPackStatus context={contextSummary} />
 
         <form onSubmit={sendMessage} className="flex flex-col gap-2 md:flex-row">
           <textarea

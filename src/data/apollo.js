@@ -102,7 +102,7 @@ export const APOLLO_FOUNDATION_STEPS = [
     step: "13D",
     title: "Apollo Chat",
     status: "Foundation",
-    detail: "Head-coach chat is grounded in Apollo audit history before broader agent autonomy.",
+    detail: "Head-coach chat now uses server-built context packs before broader agent autonomy.",
   },
   {
     step: "13E",

@@ -11,7 +11,7 @@ The runner is the protected server layer for Apollo. It is intentionally limited
 - Future Vercel Cron compatibility through `Authorization: Bearer ${CRON_SECRET}` on `GET`.
 - Optional audit persistence into `apollo_agent_runs` and `apollo_findings`: manual runs use the verified head-coach session; scheduled runs need the server-only service-role key.
 - Audit-history view in the Admin Apollo tab.
-- Apollo Chat v1 in the Admin Apollo tab. It answers from audit history and approved roadmap context, using the server model path only when AI Gateway auth is configured.
+- Apollo Chat v1 in the Admin Apollo tab. It answers from server-built context packs for guardrails, roadmap, audit, portal snapshot, memory, and approvals. It uses the server model path only when AI Gateway auth is configured.
 - No background loop.
 - No browser-side model call.
 - No deployment, migration, access, or paid action.
@@ -29,6 +29,8 @@ The runner is the protected server layer for Apollo. It is intentionally limited
 - `CRON_SECRET`: accepted as a fallback runner secret if `APOLLO_RUNNER_SECRET` is not set. Vercel Cron sends this value as an `Authorization` bearer token.
 - `APOLLO_MODEL`: optional Apollo Chat model selector. Defaults to `openai/gpt-5.4` when server AI Gateway auth exists.
 - `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`: server-side AI Gateway auth for Apollo Chat. Keep unset until model calls are explicitly approved.
+- `APOLLO_CONTEXT_SENSITIVITY`: optional memory-pack sensitivity ceiling. Defaults to `internal`.
+- `APOLLO_INCLUDE_RESTRICTED_CONTEXT`: optional flag for restricted Apollo memory. Keep unset unless restricted context is deliberately approved for model prompts.
 
 ## Activation order
 
@@ -36,7 +38,8 @@ The runner is the protected server layer for Apollo. It is intentionally limited
 2. Verify a manual Apollo check records a run and findings through the head-coach session.
 3. Add `SUPABASE_SERVICE_ROLE_KEY` in Vercel as a server-only environment variable before scheduled audit writes.
 4. Add `APOLLO_RUNNER_SECRET` before any scheduled or server-to-server trigger.
-5. Add model access only after the audit path and approval queue are working. Apollo Chat falls back to deterministic audit-context answers without it.
+5. Keep Apollo context packs visible in chat and audit metadata.
+6. Add model access only after the audit path and approval queue are working. Apollo Chat falls back to deterministic context-pack answers without it.
 
 ## Security rules
 

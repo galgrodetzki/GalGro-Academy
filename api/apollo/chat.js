@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
+import { buildApolloContextPacks } from "./contextPacks.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL
   ?? process.env.VITE_SUPABASE_URL
@@ -19,14 +20,6 @@ const JSON_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "Vary": "Authorization",
 };
-
-const ROADMAP = [
-  "13A Command Foundation: complete.",
-  "13B Server-side Runner: foundation done; manual audit records are visible.",
-  "13C Department Agents: foundation done for Security, Cyber, and QA in read-only mode.",
-  "13D Apollo Chat: foundation active; grounded in audit history before broader autonomy.",
-  "13E Background Heartbeat: next, but still locked until scheduling, cost, scope, and server-only secrets are approved.",
-];
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS });
@@ -108,91 +101,6 @@ async function authorizeHeadCoach(request) {
   };
 }
 
-async function safeCount(supabase, tableName) {
-  const { count, error } = await supabase
-    .from(tableName)
-    .select("*", { count: "exact", head: true });
-
-  return {
-    tableName,
-    count: count ?? 0,
-    error: error?.message ?? "",
-  };
-}
-
-async function loadAuditContext(supabase) {
-  const [{ data: runs, error: runsError }, counts] = await Promise.all([
-    supabase
-      .from("apollo_agent_runs")
-      .select("id,agent_key,agent_name,run_type,status,scope,summary,created_at")
-      .order("created_at", { ascending: false })
-      .limit(6),
-    Promise.all([
-      safeCount(supabase, "profiles"),
-      safeCount(supabase, "sessions"),
-      safeCount(supabase, "players"),
-      safeCount(supabase, "agent_proposals"),
-      safeCount(supabase, "custom_drills"),
-    ]),
-  ]);
-
-  if (runsError) {
-    throw new Error(`Could not load Apollo runs: ${runsError.message}`);
-  }
-
-  const runIds = (runs ?? []).map((run) => run.id);
-  const { data: findings, error: findingsError } = runIds.length > 0
-    ? await supabase
-      .from("apollo_findings")
-      .select("id,run_id,agent_key,title,severity,category,finding,recommendation,approval_required,status,metadata,created_at")
-      .in("run_id", runIds)
-      .order("created_at", { ascending: true })
-    : { data: [], error: null };
-
-  if (findingsError) {
-    throw new Error(`Could not load Apollo findings: ${findingsError.message}`);
-  }
-
-  const findingsByRun = new Map();
-  for (const finding of findings ?? []) {
-    const current = findingsByRun.get(finding.run_id) ?? [];
-    current.push({
-      agentName: finding.metadata?.agentName ?? finding.agent_key,
-      title: finding.title,
-      severity: finding.severity,
-      category: finding.category,
-      finding: finding.finding,
-      recommendation: finding.recommendation,
-      approvalRequired: finding.approval_required,
-      status: finding.status,
-      createdAt: finding.created_at,
-    });
-    findingsByRun.set(finding.run_id, current);
-  }
-
-  const mappedRuns = (runs ?? []).map((run) => ({
-    id: run.id,
-    agentName: run.agent_name,
-    runType: run.run_type,
-    status: run.status,
-    scope: run.scope,
-    summary: run.summary,
-    createdAt: run.created_at,
-    findings: findingsByRun.get(run.id) ?? [],
-  }));
-
-  return {
-    roadmap: ROADMAP,
-    portalCounts: counts,
-    runs: mappedRuns,
-    totalFindings: mappedRuns.reduce((sum, run) => sum + run.findings.length, 0),
-    approvalFindings: mappedRuns.reduce(
-      (sum, run) => sum + run.findings.filter((finding) => finding.approvalRequired).length,
-      0
-    ),
-  };
-}
-
 function latestFindings(context, predicate = () => true, limit = 5) {
   return context.runs
     .flatMap((run) => run.findings.map((finding) => ({ ...finding, runSummary: run.summary })))
@@ -218,49 +126,33 @@ function buildGroundedReply(message, context) {
     const findings = latestFindings(
       context,
       (finding) => ["head_security", "head_cyber"].includes(finding.agentName?.toLowerCase().replace(/\s+/g, "_"))
+        || ["head_of_security", "head_of_cyber"].includes(finding.agentName?.toLowerCase().replace(/\s+/g, "_"))
         || ["secrets", "runner", "scope", "permissions", "abuse_resistance"].includes(finding.category)
     );
     return `Security status from the recorded Apollo context:\n${formatFindingList(findings)}\n\nI would keep background heartbeat locked until scheduled audit writes, runner secrets, and rate controls are approved.`;
   }
 
   if (lower.includes("next") || lower.includes("plan") || lower.includes("roadmap")) {
-    return `Apollo Chat v1 is active. My next recommendation is model-backed context packs, then 13E background heartbeat.\n\nRoadmap:\n${context.roadmap.map((item) => `- ${item}`).join("\n")}`;
+    return `Apollo Chat context packs are active. My next recommendation is server-side model auth for those packs, then 13E background heartbeat.\n\nRoadmap:\n${context.roadmap.map((item) => `- ${item}`).join("\n")}`;
   }
 
   if (lower.includes("audit") || lower.includes("history") || lower.includes("record")) {
     return `Audit history is active. I can see ${context.runs.length} recent Apollo runs with ${context.totalFindings} findings and ${context.approvalFindings} approval-gated findings. Latest run: ${latestRun?.summary ?? "none yet"}.`;
   }
 
-  return `I am online in grounded chat mode. I can see ${context.runs.length} recent Apollo audit runs, ${context.totalFindings} findings, and portal counts (${counts}). The safest next move is to keep using this chat against audit history first, then enable model-backed context packs before any scheduled heartbeat.`;
+  return `I am online in grounded context-pack mode. I can see ${context.runs.length} recent Apollo audit runs, ${context.totalFindings} findings, and portal counts (${counts}). Context packs ready: ${context.summary.ready}; partial: ${context.summary.partial}. The safest next move is server-side model auth for these packs before any scheduled heartbeat.`;
 }
 
 function buildModelPrompt({ message, context, actor }) {
-  const compactRuns = context.runs.map((run) => ({
-    summary: run.summary,
-    status: run.status,
-    runType: run.runType,
-    scope: run.scope,
-    createdAt: run.createdAt,
-    findings: run.findings.map((finding) => ({
-      agentName: finding.agentName,
-      title: finding.title,
-      severity: finding.severity,
-      category: finding.category,
-      recommendation: finding.recommendation,
-      approvalRequired: finding.approvalRequired,
-    })),
-  }));
-
   return [
     `Head coach: ${actor.name}`,
     `Question: ${message}`,
-    "Approved context:",
+    "Approved Apollo context packs:",
     JSON.stringify({
-      roadmap: context.roadmap,
-      portalCounts: context.portalCounts,
-      recentRuns: compactRuns,
-      totalFindings: context.totalFindings,
-      approvalFindings: context.approvalFindings,
+      version: context.version,
+      generatedAt: context.generatedAt,
+      summary: context.summary,
+      packs: context.packs,
     }, null, 2),
   ].join("\n\n");
 }
@@ -273,7 +165,7 @@ async function buildApolloReply({ message, context, actor }) {
       mode: "grounded_fallback",
       model: null,
       reply: fallback,
-      modelStatus: "AI Gateway auth is not configured, so Apollo answered from deterministic audit context.",
+      modelStatus: "AI Gateway auth is not configured, so Apollo answered from deterministic context packs.",
     };
   }
 
@@ -282,7 +174,8 @@ async function buildApolloReply({ message, context, actor }) {
       model: APOLLO_MODEL,
       system: [
         "You are Apollo, the command layer for GalGro's Academy.",
-        "Use only the approved context in the prompt. If the context does not support an answer, say what is missing.",
+        "Use only the approved context packs in the prompt. If the context does not support an answer, say what is missing.",
+        "Treat partial context packs as imperfect evidence. Name the gap if it affects the recommendation.",
         "Be concise, operational, and honest. Do not claim background agents, model access, deployments, migrations, or live monitoring are active unless the context says so.",
         "Never reveal secrets. Never recommend destructive or third-party security testing. Keep scheduled/background autonomy locked unless audit, scope, cost, and approval controls are ready.",
       ].join(" "),
@@ -306,7 +199,7 @@ async function buildApolloReply({ message, context, actor }) {
   }
 }
 
-async function recordChatAudit({ supabase, actor, message, reply, mode, model }) {
+async function recordChatAudit({ supabase, actor, message, reply, mode, model, context }) {
   const timestamp = new Date().toISOString();
   const { data: run, error: runError } = await supabase
     .from("apollo_agent_runs")
@@ -344,6 +237,11 @@ async function recordChatAudit({ supabase, actor, message, reply, mode, model })
       agentName: "Apollo",
       mode,
       model,
+      contextPackVersion: context.version,
+      contextPacks: context.summary.packs.map((pack) => ({
+        key: pack.key,
+        status: pack.status,
+      })),
     },
   });
 
@@ -366,7 +264,7 @@ async function handleChat(request) {
     return json({ error: `Apollo chat messages are limited to ${MAX_MESSAGE_LENGTH} characters.` }, 400);
   }
 
-  const context = await loadAuditContext(auth.supabase);
+  const context = await buildApolloContextPacks({ supabase: auth.supabase, actor: auth.actor });
   const answer = await buildApolloReply({ message, context, actor: auth.actor });
   const audit = await recordChatAudit({
     supabase: auth.supabase,
@@ -375,6 +273,7 @@ async function handleChat(request) {
     reply: answer.reply,
     mode: answer.mode,
     model: answer.model,
+    context,
   });
 
   return json({
@@ -385,6 +284,10 @@ async function handleChat(request) {
     modelStatus: answer.modelStatus,
     audit,
     context: {
+      version: context.version,
+      generatedAt: context.generatedAt,
+      summary: context.summary,
+      packs: context.summary.packs,
       runCount: context.runs.length,
       findingCount: context.totalFindings,
       approvalFindingCount: context.approvalFindings,
