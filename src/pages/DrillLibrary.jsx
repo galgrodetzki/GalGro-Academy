@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
-import { Search, Clock, Zap, Package, ChevronRight, Sparkles, Play, SearchX } from "lucide-react";
+import { Search, Clock, Zap, Package, ChevronRight, Sparkles, Play, SearchX, Map } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import CategoryIcon from "../components/CategoryIcon";
 import EmptyState from "../components/ui/EmptyState";
+import DrillDiagram from "../components/ui/DrillDiagram";
+import { DRILL_DIAGRAMS } from "../data/drillDiagrams";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useScrollLock } from "../hooks/useScrollLock";
 import { useData } from "../context/DataContext";
@@ -149,6 +151,11 @@ export default function DrillLibrary() {
                       <Package size={11} /> {d.eq.length}
                     </span>
                   )}
+                  {DRILL_DIAGRAMS[d.id] && (
+                    <span className="flex items-center gap-1 text-info" title="Has setup diagram">
+                      <Map size={11} />
+                    </span>
+                  )}
                 </div>
                 <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 group-hover:text-accent transition-all" />
               </div>
@@ -205,11 +212,18 @@ export default function DrillLibrary() {
                 href={selected.video}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2.5 mb-6 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all text-sm font-semibold"
+                className="flex items-center gap-2.5 mb-5 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all text-sm font-semibold"
               >
                 <Play size={16} fill="currentColor" />
                 Watch on YouTube
               </a>
+            )}
+
+            {DRILL_DIAGRAMS[selected.id] && (
+              <div className="mb-5">
+                <div className="label">Setup</div>
+                <DrillDiagram diagram={DRILL_DIAGRAMS[selected.id]} />
+              </div>
             )}
 
             <Section title="Description">{selected.desc}</Section>

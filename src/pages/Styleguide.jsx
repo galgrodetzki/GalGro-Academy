@@ -6,6 +6,9 @@ import Skeleton, { SkeletonList } from "../components/ui/Skeleton";
 import StatChip from "../components/ui/StatChip";
 import SectionHeading from "../components/ui/SectionHeading";
 import StatusDot from "../components/ui/StatusDot";
+import DrillDiagram from "../components/ui/DrillDiagram";
+import { DRILL_DIAGRAMS } from "../data/drillDiagrams";
+import { DRILLS } from "../data/drills";
 
 /**
  * Design system reference. Everything the app uses visually lives here.
@@ -245,6 +248,30 @@ export default function Styleguide() {
           <p className="text-sm text-white/60">
             Heading above has: overline · title · hint · action. All props optional.
           </p>
+        </div>
+      </section>
+
+      {/* ── Drill diagrams preview ────────────────────────────────────── */}
+      <section className="mb-10">
+        <SectionHeading
+          overline="Content"
+          title={`Drill diagrams (${Object.keys(DRILL_DIAGRAMS).length} pilot drills)`}
+          hint="SVG pitch setup. Coordinate reference in DrillDiagram.jsx."
+        />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Object.keys(DRILL_DIAGRAMS).map((drillId) => {
+            const drill = DRILLS.find((d) => d.id === drillId);
+            if (!drill) return null;
+            return (
+              <div key={drillId} className="card p-3">
+                <div className="mb-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-white/40">{drillId}</div>
+                  <div className="text-sm font-bold">{drill.name}</div>
+                </div>
+                <DrillDiagram diagram={DRILL_DIAGRAMS[drillId]} />
+              </div>
+            );
+          })}
         </div>
       </section>
 
