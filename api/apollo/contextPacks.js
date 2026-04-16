@@ -1,4 +1,4 @@
-const CONTEXT_PACK_VERSION = "13F.0";
+const CONTEXT_PACK_VERSION = "13F.1";
 const DEFAULT_MEMORY_SENSITIVITY = "internal";
 const MEMORY_SENSITIVITY_ORDER = ["public", "internal", "restricted"];
 const INCLUDE_RESTRICTED_CONTEXT = process.env.APOLLO_INCLUDE_RESTRICTED_CONTEXT === "true";
@@ -10,7 +10,7 @@ export const APOLLO_ROADMAP = [
   "13C Department Agents: foundation done for Security, Cyber, and QA in read-only mode.",
   "13D Apollo Chat: context packs and editable memory are active; model-backed reasoning is server-gated.",
   "13E Model Access: complete. OpenAI key configured server-side; model-backed chat active via @ai-sdk/openai (gpt-5-mini). Falls back to deterministic context packs on failure.",
-  "13F Background Heartbeat: manual dry-run exists; scheduled runs stay locked until scheduling, cost, scope, and server-only secrets are approved.",
+  "13F Background Heartbeat: complete. Daily cron at 09:00 UTC active via vercel.json. APOLLO_HEARTBEAT_ENABLED, CRON_SECRET, and SUPABASE_SERVICE_ROLE_KEY all configured. Manual smoke test passed; audit entry confirmed.",
 ];
 
 function truncateText(value = "", maxLength = 420) {
@@ -104,10 +104,10 @@ function buildRoadmapPack() {
     key: "roadmap",
     title: "Apollo Roadmap",
     status: "ready",
-    summary: "Apollo Chat and model access are active; heartbeat is dry-run only until the server runner is fully gated.",
+    summary: "Apollo Chat, model access, and background heartbeat are all active. Daily cron running at 09:00 UTC.",
     metrics: {
       current: "13F",
-      next: "Scheduled heartbeat approval (scope, cost, secrets)",
+      next: "Apollo Memory seeding and department agent expansion",
     },
     items: APOLLO_ROADMAP,
   };
