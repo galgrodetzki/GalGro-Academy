@@ -9,7 +9,7 @@ export const APOLLO_ROADMAP = [
   "13B Server-side Runner: foundation done; manual audit records are visible.",
   "13C Department Agents: foundation done for Security, Cyber, and QA in read-only mode.",
   "13D Apollo Chat: context packs and editable memory are active; model-backed reasoning is server-gated.",
-  "13E Model Access: server readiness status exists; waits for AI Gateway auth or Vercel OIDC approval.",
+  "13E Model Access: complete. OpenAI key configured server-side; model-backed chat active via @ai-sdk/openai (gpt-5-mini). Falls back to deterministic context packs on failure.",
   "13F Background Heartbeat: manual dry-run exists; scheduled runs stay locked until scheduling, cost, scope, and server-only secrets are approved.",
 ];
 
@@ -104,10 +104,10 @@ function buildRoadmapPack() {
     key: "roadmap",
     title: "Apollo Roadmap",
     status: "ready",
-    summary: "Apollo Chat and memory are active; heartbeat is dry-run only until the server runner is fully gated.",
+    summary: "Apollo Chat and model access are active; heartbeat is dry-run only until the server runner is fully gated.",
     metrics: {
       current: "13F",
-      next: "Model auth, then scheduled heartbeat approval",
+      next: "Scheduled heartbeat approval (scope, cost, secrets)",
     },
     items: APOLLO_ROADMAP,
   };
