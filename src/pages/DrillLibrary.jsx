@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
-import { Search, Clock, Zap, Package, ChevronRight, Sparkles, Play } from "lucide-react";
+import { Search, Clock, Zap, Package, ChevronRight, Sparkles, Play, SearchX } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import CategoryIcon from "../components/CategoryIcon";
+import EmptyState from "../components/ui/EmptyState";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useScrollLock } from "../hooks/useScrollLock";
 import { useData } from "../context/DataContext";
@@ -157,9 +158,19 @@ export default function DrillLibrary() {
       </div>
 
       {filtered.length === 0 && (
-        <div className="card p-12 text-center text-white/40">
-          No drills match your filters.
-        </div>
+        <EmptyState
+          icon={<SearchX size={28} />}
+          title="No drills match your filters"
+          body="Try clearing the search or picking a different category."
+          action={{
+            label: "Clear filters",
+            onClick: () => {
+              setSearch("");
+              setCat("all");
+              setIntensity("all");
+            },
+          }}
+        />
       )}
 
       {/* Drill detail modal */}

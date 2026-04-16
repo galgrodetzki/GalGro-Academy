@@ -9,6 +9,7 @@ import {
   CheckCircle2, Clock3, MessageSquareText, UserCheck, AlertCircle,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
+import EmptyState from "../components/ui/EmptyState";
 import { modalBackdropMotion, modalPanelMotion } from "../utils/motion";
 
 const formatDate = (iso) =>
@@ -166,16 +167,12 @@ export default function Players() {
       </PageHeader>
 
       {players.length === 0 ? (
-        <div className="card p-12 text-center">
-          <Users className="mx-auto text-white/20 mb-4" size={48} />
-          <h3 className="font-display text-lg font-bold mb-1">No players yet</h3>
-          <p className="text-sm text-white/50 mb-4">Add your goalkeepers to start tracking their sessions.</p>
-          {canEdit && (
-            <button onClick={openAdd} className="btn btn-primary mx-auto">
-              <Plus size={14} /> Add your first player
-            </button>
-          )}
-        </div>
+        <EmptyState
+          icon={<Users size={28} />}
+          title="No players yet"
+          body="Add your goalkeepers to start tracking their sessions, attendance, and notes."
+          action={canEdit ? { label: "Add your first player", onClick: openAdd } : null}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {players.map((p) => {

@@ -16,6 +16,7 @@ const SessionBuilder = lazy(() => import("./pages/SessionBuilder"));
 const MySessions = lazy(() => import("./pages/MySessions"));
 const Players = lazy(() => import("./pages/Players"));
 const Admin = lazy(() => import("./pages/Admin"));
+const Styleguide = lazy(() => import("./pages/Styleguide"));
 
 function LoadingState({ label = "Loading academy..." }) {
   return (
@@ -76,7 +77,7 @@ function AppInner() {
   if (isAccessBlocked) return <AccessBlocked accessStatus={accessStatus} onSignOut={signOut} />;
 
   const canAccessPage = (p) => {
-    if (p === "admin") return isCoach;
+    if (p === "admin" || p === "styleguide") return isCoach;
     if (p === "builder" || p === "players") return canEdit;
     return true;
   };
@@ -135,7 +136,8 @@ function AppInner() {
               {activePage === "builder"   && <SessionBuilder />}
               {activePage === "sessions"  && <MySessions />}
               {activePage === "players"   && <Players />}
-              {activePage === "admin"     && isCoach && <Admin />}
+              {activePage === "admin"     && isCoach && <Admin setPage={goTo} />}
+              {activePage === "styleguide"&& isCoach && <Styleguide />}
             </Suspense>
           </Motion.div>
         </AnimatePresence>

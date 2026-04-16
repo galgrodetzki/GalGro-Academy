@@ -1,4 +1,4 @@
-import { LayoutDashboard, BookOpen, Layers, Users, Calendar, Settings, LogOut, Shield } from "lucide-react";
+import { LayoutDashboard, BookOpen, Layers, Users, Calendar, Settings, LogOut, Shield, Palette } from "lucide-react";
 import { motion as Motion } from "framer-motion";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { EMPTY_SESSION } from "../hooks/useSession";
@@ -105,6 +105,29 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
                 {pendingProposalCount}
               </span>
             )}
+          </Motion.button>
+        )}
+
+        {/* Styleguide — head coach only, design system reference */}
+        {isCoach && (
+          <Motion.button
+            onClick={() => setPage("styleguide")}
+            whileTap={navItemTap}
+            className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors text-left overflow-hidden ${
+              page === "styleguide"
+                ? "text-accent border-accent/25 shadow-[inset_3px_0_0_rgba(0,232,122,0.95)]"
+                : "text-white/50 border-transparent hover:text-white hover:bg-bg-card"
+            }`}
+          >
+            {page === "styleguide" && (
+              <Motion.span
+                layoutId="sidebar-active-surface"
+                className="absolute inset-0 rounded-lg bg-accent/10"
+                transition={{ type: "spring", stiffness: 420, damping: 36 }}
+              />
+            )}
+            <Palette className="relative z-10" size={18} />
+            <span className="relative z-10">Styleguide</span>
           </Motion.button>
         )}
       </nav>
