@@ -1,135 +1,201 @@
 import { useCallback, useEffect, useState } from "react";
-import { Activity, BrainCircuit, RefreshCw, RadioTower } from "lucide-react";
+import { Activity, BrainCircuit, RadioTower, RefreshCw, ShieldCheck } from "lucide-react";
+import { motion as Motion } from "framer-motion";
 import { fetchApolloStatus } from "../lib/apolloStatus";
+import Skeleton from "./ui/Skeleton";
 
-function StatusCell({ icon: Icon, label, value, detail, meta = [], tone = "neutral" }) {
-  const toneClass = tone === "ready"
-    ? "border-accent/30 bg-accent/10 text-accent"
-    : tone === "warning"
-      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-300"
-      : "border-bg-border bg-bg-soft text-white/65";
+// Derive overall system state from model + heartbeat data
+function deriveSystemState(model, heartbeat) {
+  if (!model && !heartbeat) return "idle";
+  const modelOk = model?.configured;
+  const hbOk = heartbeat?.armed;
+  if (modelOk && hbOk) return "live";
+  if (modelOk || hbOk) return "warn";
+  return "warn"; // partial config = warn, not idle
+}
+
+function StatusOrb({ state = "idle" }) {
+  const config = {
+    live: {
+      outer: "bg-accent/10 border-accent/20",
+      middle: "bg-accent/20",
+      inner: "bg-accent",
+      glow: "shadow-[0_0_24px_rgba(0,232,122,0.55)]",
+      pulse: "animate-pulse-dot",
+      label: "All systems live",
+      labelColor: "text-accent",
+    },
+    warn: {
+      outer: "bg-warning/10 border-warning/20",
+      middle: "bg-warning/20",
+      inner: "bg-warning",
+      glow: "shadow-[0_0_24px_rgba(245,158,11,0.45)]",
+      pulse: "",
+      label: "Partial configuration",
+      labelColor: "text-warning",
+    },
+    idle: {
+      outer: "bg-bg-card2 border-bg-border",
+      middle: "bg-white/10",
+      inner: "bg-white/30",
+      glow: "",
+      pulse: "",
+      label: "Locked — fallback mode",
+      labelColor: "text-white/50",
+    },
+  }[state];
 
   return (
-    <div className={`rounded-lg border p-4 ${toneClass}`}>
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide opacity-70">
-        <Icon size={13} />
-        {label}
-      </div>
-      <div className="font-display text-lg font-bold text-white">{value}</div>
-      <p className="mt-2 text-xs leading-relaxed text-white/45">{detail}</p>
-      {meta.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {meta.map((item) => (
-            <span key={item} className="tag border border-bg-border bg-bg-card2 normal-case tracking-normal text-white/55">
-              {item}
-            </span>
-          ))}
+    <div className="flex flex-col items-center gap-3">
+      {/* Orb */}
+      <Motion.div
+        initial={{ scale: 0.85, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 22 }}
+        className={`relative flex h-16 w-16 items-center justify-center rounded-full border ${config.outer}`}
+      >
+        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${config.middle}`}>
+          <div className={`h-5 w-5 rounded-full ${config.inner} ${config.glow} ${config.pulse}`} />
         </div>
-      )}
+      </Motion.div>
+      <span className={`text-[11px] font-semibold ${config.labelColor}`}>{config.label}</span>
+    </div>
+  );
+}
+
+function InfoRow({ label, value, tone = "neutral" }) {
+  const toneClass = {
+    ready: "text-accent",
+    warn: "text-warning",
+    neutral: "text-white/75",
+  }[tone];
+
+  return (
+    <div className="flex items-center justify-between gap-2 py-1.5 border-b border-bg-border/50 last:border-0">
+      <span className="text-[11px] text-white/40 uppercase tracking-wide font-semibold">{label}</span>
+      <span className={`text-[11px] font-bold ${toneClass}`}>{value}</span>
     </div>
   );
 }
 
 export default function ApolloOperationsStatus() {
-  const [state, setState] = useState({
-    status: "idle",
-    data: null,
-    error: "",
-  });
+  const [state, setState] = useState({ status: "idle", data: null, error: "" });
 
   const loadStatus = useCallback(async () => {
-    setState((current) => ({
-      status: current.data ? "refreshing" : "loading",
-      data: current.data,
-      error: "",
-    }));
-
+    setState((s) => ({ status: s.data ? "refreshing" : "loading", data: s.data, error: "" }));
     try {
       const data = await fetchApolloStatus();
       setState({ status: "success", data, error: "" });
-    } catch (error) {
-      setState((current) => ({
+    } catch (err) {
+      setState((s) => ({
         status: "error",
-        data: current.data,
-        error: error instanceof Error ? error.message : "Apollo status could not load.",
+        data: s.data,
+        error: err instanceof Error ? err.message : "Apollo status could not load.",
       }));
     }
   }, []);
 
-  useEffect(() => {
-    loadStatus();
-  }, [loadStatus]);
+  useEffect(() => { loadStatus(); }, [loadStatus]);
 
   const loading = state.status === "loading";
   const refreshing = state.status === "refreshing";
   const model = state.data?.model;
   const heartbeat = state.data?.heartbeat;
   const context = state.data?.context;
+  const systemState = state.data ? deriveSystemState(model, heartbeat) : "idle";
 
   return (
     <section className="card p-5">
-      <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="mb-2 flex items-center gap-2">
-            <Activity size={16} className="text-electric" />
-            <h3 className="font-display font-bold">Apollo Operations</h3>
-          </div>
-          <p className="max-w-2xl text-sm leading-relaxed text-white/50">
-            Server-side readiness for model reasoning, heartbeat gates, and context packs.
-          </p>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 mb-5">
+        <div className="flex items-center gap-2">
+          <Activity size={15} className="text-info" />
+          <h3 className="font-display font-bold text-sm">System Status</h3>
         </div>
         <button
           type="button"
           onClick={loadStatus}
           disabled={loading || refreshing}
-          className="btn btn-secondary justify-center disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn btn-secondary py-1.5 px-3 text-xs disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-          Refresh status
+          <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+          {refreshing ? "Refreshing…" : "Refresh"}
         </button>
       </div>
 
       {state.error && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="mb-4 rounded-lg border border-danger-border bg-danger-soft px-4 py-3 text-sm text-danger">
           {state.error}
         </div>
       )}
 
-      {loading && (
-        <div className="flex items-center justify-center rounded-lg border border-bg-border bg-bg-soft py-10">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="space-y-3 rounded-lg border border-bg-border p-4">
+              <Skeleton className="h-16 w-16 rounded-full mx-auto" />
+              <Skeleton className="h-3 w-20 mx-auto" />
+            </div>
+          ))}
         </div>
-      )}
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Center: orb */}
+          <div className="rounded-lg border border-bg-border bg-bg-soft p-4 flex flex-col items-center justify-center gap-3 order-first sm:order-none">
+            <StatusOrb state={systemState} />
+          </div>
 
-      {!loading && (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <StatusCell
-            icon={BrainCircuit}
-            label="Model"
-            value={model?.configured ? "Model ready" : "Grounded only"}
-            detail={model?.message ?? "Apollo status has not loaded yet."}
-            meta={model ? [`auth: ${model.authMode}`, `model: ${model.model}`] : []}
-            tone={model?.configured ? "ready" : "warning"}
-          />
-          <StatusCell
-            icon={RadioTower}
-            label="Heartbeat"
-            value={heartbeat?.armed ? "Armed" : "Dry run only"}
-            detail={heartbeat?.message ?? "Apollo status has not loaded yet."}
-            meta={heartbeat ? [
-              `enabled: ${heartbeat.enabled ? "yes" : "no"}`,
-              `runner secret: ${heartbeat.runnerSecretConfigured ? "yes" : "no"}`,
-              `service role: ${heartbeat.serviceRoleConfigured ? "yes" : "no"}`,
-            ] : []}
-            tone={heartbeat?.armed ? "ready" : "warning"}
-          />
-          <StatusCell
-            icon={Activity}
-            label="Context"
-            value={context ? `${context.summary.ready} ready / ${context.summary.partial} partial` : "Not loaded"}
-            detail={context ? `Context pack version ${context.version}.` : "Apollo context status has not loaded yet."}
-            tone={context?.summary.partial ? "warning" : "ready"}
-          />
+          {/* Model cell */}
+          <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
+            <div className="flex items-center gap-1.5 mb-3">
+              <BrainCircuit size={13} className="text-info" />
+              <span className="text-[10px] font-bold uppercase tracking-wide text-white/40">Model</span>
+            </div>
+            {model ? (
+              <div>
+                <div className={`font-display text-base font-bold mb-3 ${model.configured ? "text-accent" : "text-white/70"}`}>
+                  {model.configured ? "Ready" : "Grounded only"}
+                </div>
+                <InfoRow label="auth" value={model.authMode} tone={model.configured ? "ready" : "warn"} />
+                <InfoRow label="model" value={model.model} />
+                <InfoRow label="mode" value={model.mode} tone={model.configured ? "ready" : "neutral"} />
+              </div>
+            ) : (
+              <div className="text-xs text-white/40">Not loaded</div>
+            )}
+          </div>
+
+          {/* Heartbeat + context cell */}
+          <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
+            <div className="flex items-center gap-1.5 mb-3">
+              <RadioTower size={13} className="text-info" />
+              <span className="text-[10px] font-bold uppercase tracking-wide text-white/40">Heartbeat</span>
+            </div>
+            {heartbeat ? (
+              <div>
+                <div className={`font-display text-base font-bold mb-3 ${heartbeat.armed ? "text-accent" : "text-warning"}`}>
+                  {heartbeat.armed ? "Armed" : "Locked"}
+                </div>
+                <InfoRow label="enabled" value={heartbeat.enabled ? "yes" : "no"} tone={heartbeat.enabled ? "ready" : "warn"} />
+                <InfoRow label="runner secret" value={heartbeat.runnerSecretConfigured ? "yes" : "no"} tone={heartbeat.runnerSecretConfigured ? "ready" : "warn"} />
+                <InfoRow label="service role" value={heartbeat.serviceRoleConfigured ? "yes" : "no"} tone={heartbeat.serviceRoleConfigured ? "ready" : "warn"} />
+              </div>
+            ) : (
+              <div className="text-xs text-white/40">Not loaded</div>
+            )}
+
+            {context && (
+              <div className="mt-4 pt-3 border-t border-bg-border/50">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <ShieldCheck size={12} className="text-white/30" />
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-white/30">Context packs</span>
+                </div>
+                <InfoRow label="ready" value={context.summary.ready} tone="ready" />
+                <InfoRow label="partial" value={context.summary.partial} tone={context.summary.partial ? "warn" : "neutral"} />
+                <InfoRow label="version" value={context.version} />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </section>

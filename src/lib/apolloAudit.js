@@ -56,6 +56,32 @@ function mapRun(row, findings) {
   };
 }
 
+const ACTIVE_AGENT_KEYS = ["head_security", "head_cyber", "qa_lead", "drill_scout"];
+
+export async function fetchApolloSparklineData() {
+  const { data, error } = await supabase
+    .from("apollo_agent_runs")
+    .select("id,agent_key,status,created_at")
+    .in("agent_key", ACTIVE_AGENT_KEYS)
+    .order("created_at", { ascending: false })
+    .limit(60);
+
+  if (error) throw new Error(`Could not load sparkline data: ${error.message}`);
+
+  // Group by agent key, keep last 7 per agent
+  const grouped = {};
+  for (const key of ACTIVE_AGENT_KEYS) grouped[key] = [];
+  for (const row of data ?? []) {
+    const bucket = grouped[row.agent_key];
+    if (bucket && bucket.length < 7) {
+      bucket.push({ id: row.id, status: row.status, createdAt: row.created_at });
+    }
+  }
+  // Reverse so oldest→newest (left to right)
+  for (const key of ACTIVE_AGENT_KEYS) grouped[key].reverse();
+  return grouped;
+}
+
 export async function fetchApolloAuditHistory({ limit = 8 } = {}) {
   const { data: runs, error: runsError } = await supabase
     .from("apollo_agent_runs")

@@ -7,6 +7,7 @@ import {
   FileDown, MessageSquareText, UserCheck,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
+import EmptyState from "../components/ui/EmptyState";
 import CategoryIcon from "../components/CategoryIcon";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
@@ -238,21 +239,17 @@ export default function MySessions() {
       </div>
 
       {displayed.length === 0 ? (
-        <div className="card p-12 text-center">
-          <Layers className="mx-auto text-white/20 mb-4" size={48} />
-          <h3 className="font-display text-lg font-bold mb-1">
-            {tab === "upcoming" ? "No upcoming sessions" : "No completed sessions yet"}
-          </h3>
-          <p className="text-sm text-white/50">
-            {tab === "upcoming"
-              ? isKeeper && !currentPlayer
-                ? "Ask your coach to connect your account to your roster profile."
-                : canEdit
-                ? "Go to Session Builder, build a session, and save it as Upcoming."
-                : "Upcoming sessions assigned to you will show up here."
-              : "Sessions marked as Completed show up here."}
-          </p>
-        </div>
+        <EmptyState
+          icon={<Layers size={26} />}
+          title={tab === "upcoming" ? "No upcoming sessions" : "No completed sessions yet"}
+          body={tab === "upcoming"
+            ? isKeeper && !currentPlayer
+              ? "Ask your coach to connect your account to your roster profile."
+              : canEdit
+              ? "Go to Session Builder, plan a session, and save it as Upcoming."
+              : "Upcoming sessions assigned to you will show up here."
+            : "Sessions marked as Completed will appear here."}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {displayed.map((s) => (

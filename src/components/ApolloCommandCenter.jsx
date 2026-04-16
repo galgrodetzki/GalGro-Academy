@@ -1,14 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
-  Bot,
-  CheckCircle2,
-  Clock,
-  Key,
-  RefreshCw,
-  Shield,
-  Sparkles,
-  Users,
-  Zap,
+  Bot, CheckCircle2, Clock, Key, RefreshCw, Shield,
+  Sparkles, Users, Zap, AlertTriangle, Activity,
 } from "lucide-react";
 import {
   APOLLO_APPROVAL_TIERS,
@@ -19,74 +13,107 @@ import {
 import ApolloChat from "./ApolloChat";
 import ApolloMemory from "./ApolloMemory";
 import ApolloOperationsStatus from "./ApolloOperationsStatus";
-import { fetchApolloAuditHistory } from "../lib/apolloAudit";
+import EmptyState from "./ui/EmptyState";
+import StatChip from "./ui/StatChip";
+import StatusDot from "./ui/StatusDot";
+import DepartmentSparkline from "./ui/DepartmentSparkline";
+import { SkeletonList } from "./ui/Skeleton";
+import { fetchApolloAuditHistory, fetchApolloSparklineData } from "../lib/apolloAudit";
 import {
   runApolloDepartmentReview,
   runApolloHeartbeatDryRun,
   runApolloReadinessCheck,
 } from "../lib/apolloRunner";
 
-const statusStyles = {
-  Complete: "border-accent/30 bg-accent/10 text-accent",
-  Existing: "border-accent/30 bg-accent/10 text-accent",
-  Foundation: "border-electric/30 bg-electric/10 text-electric",
-  "In progress": "border-accent/30 bg-accent/10 text-accent",
-  Next: "border-electric/30 bg-electric/10 text-electric",
-  Planned: "border-bg-border bg-bg-card2 text-white/55",
-  Queued: "border-bg-border bg-bg-card2 text-white/55",
+// ── Style maps ──────────────────────────────────────────────────────────────
+
+const foundationStatusStyle = {
+  Complete:     "chip chip-success",
+  Active:       "chip chip-success",
+  Existing:     "chip chip-success",
+  Foundation:   "chip chip-info",
+  "In progress":"chip chip-info",
+  Next:         "chip chip-info",
+  Planned:      "chip chip-neutral",
+  Queued:       "chip chip-neutral",
 };
 
-const severityStyles = {
-  info: "border-electric/20 bg-electric/10 text-electric",
-  low: "border-accent/20 bg-accent/10 text-accent",
-  medium: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
-  high: "border-orange/30 bg-orange/10 text-orange",
-  critical: "border-red-500/30 bg-red-500/10 text-red-300",
+const severityStyle = {
+  info:     "chip chip-info",
+  low:      "chip chip-success",
+  medium:   "chip chip-warning",
+  high:     "bg-orange/10 text-orange border-orange/30 chip",
+  critical: "chip chip-danger",
 };
 
-const runStatusStyles = {
-  completed: "border-accent/20 bg-accent/10 text-accent",
-  failed: "border-red-500/30 bg-red-500/10 text-red-300",
-  blocked: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
-  running: "border-electric/20 bg-electric/10 text-electric",
-  queued: "border-bg-border bg-bg-card2 text-white/55",
+const runStatusStyle = {
+  completed: "chip chip-success",
+  failed:    "chip chip-danger",
+  blocked:   "chip chip-warning",
+  running:   "chip chip-info",
+  queued:    "chip chip-neutral",
 };
 
-const auditDateFormatter = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+const auditFmt = new Intl.DateTimeFormat(undefined, {
+  month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
 });
-
-function formatAuditDate(value) {
-  if (!value) return "Not recorded";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown time";
-  return auditDateFormatter.format(date);
+function fmtDate(v) {
+  if (!v) return "—";
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? "—" : auditFmt.format(d);
 }
+function fmtRunType(v = "") { return String(v).replace(/_/g, " "); }
 
-function formatRunType(value = "") {
-  return String(value ?? "").replace(/_/g, " ");
-}
+// Severity left-edge bar color
+const severityBar = {
+  info:     "bg-info",
+  low:      "bg-success",
+  medium:   "bg-warning",
+  high:     "bg-orange",
+  critical: "bg-danger",
+};
 
-function StatusPill({ status }) {
+// ── Sub-components ──────────────────────────────────────────────────────────
+
+function StatusPill({ status, className = "" }) {
   return (
-    <span className={`tag border normal-case tracking-normal ${statusStyles[status] ?? statusStyles.Planned}`}>
+    <span className={`${foundationStatusStyle[status] ?? foundationStatusStyle.Planned} ${className}`}>
       {status}
     </span>
   );
 }
 
-function CommandMetric({ icon: Icon, label, value, detail }) {
+function FindingRow({ finding }) {
   return (
-    <div className="rounded-lg border border-bg-border bg-bg-soft/80 p-4">
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
-        <Icon size={13} className="text-accent" />
-        {label}
+    <div className="relative rounded-lg border border-bg-border bg-bg-soft overflow-hidden">
+      {/* Left severity bar */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${severityBar[finding.severity] ?? severityBar.info}`} />
+      <div className="pl-4 pr-3 py-3">
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+              {finding.agentName ?? "Apollo"}
+            </div>
+            <div className="mt-0.5 text-sm font-bold text-white/90">{finding.title}</div>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {finding.approvalRequired && (
+              <span className="chip chip-warning">approval</span>
+            )}
+            <span className={severityStyle[finding.severity] ?? severityStyle.info}>
+              {finding.severity}
+            </span>
+          </div>
+        </div>
+        {finding.detail && (
+          <p className="mt-2 text-xs leading-relaxed text-white/55">{finding.detail}</p>
+        )}
+        {finding.recommendation && (
+          <p className="mt-1 text-xs leading-relaxed text-white/35">{finding.recommendation}</p>
+        )}
       </div>
-      <div className="font-display text-xl font-bold">{value}</div>
-      <div className="mt-1 text-xs text-white/45">{detail}</div>
     </div>
   );
 }
@@ -96,117 +123,94 @@ function AuditRunButton({ run, selected, onSelect }) {
     <button
       type="button"
       onClick={() => onSelect(run.id)}
-      className={`w-full rounded-lg border p-3 text-left transition-colors ${
+      className={`relative w-full rounded-lg border p-3 text-left transition-colors overflow-hidden ${
         selected
-          ? "border-accent/40 bg-accent/10"
-          : "border-bg-border bg-bg-soft hover:border-bg-card2"
+          ? "border-accent/40 bg-accent/8"
+          : "border-bg-border bg-bg-soft hover:border-accent/20 hover:bg-bg-card2"
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">
-            {formatAuditDate(run.createdAt)}
+      {/* Left status bar */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-lg ${
+        run.status === "completed" ? "bg-accent"
+        : run.status === "failed" ? "bg-danger"
+        : run.status === "blocked" ? "bg-warning"
+        : "bg-bg-border"
+      }`} />
+      <div className="pl-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] text-white/35 font-semibold">{fmtDate(run.createdAt)}</div>
+            <div className="mt-0.5 text-sm font-bold text-white/85 truncate">{run.summary}</div>
           </div>
-          <div className="mt-1 truncate text-sm font-bold text-white/85">{run.summary}</div>
+          <span className={`${runStatusStyle[run.status] ?? runStatusStyle.queued} flex-shrink-0`}>
+            {run.status}
+          </span>
         </div>
-        <span className={`tag shrink-0 border normal-case tracking-normal ${runStatusStyles[run.status] ?? runStatusStyles.queued}`}>
-          {run.status}
-        </span>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-white/40">
-        <span>{formatRunType(run.runType)}</span>
-        <span>/</span>
-        <span>{run.findingCount} findings</span>
-        {run.approvalCount > 0 && (
-          <>
-            <span>/</span>
-            <span className="text-yellow-300">{run.approvalCount} approvals</span>
-          </>
-        )}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-white/40">
+          <span>{fmtRunType(run.runType)}</span>
+          <span className="opacity-40">·</span>
+          <span>{run.findingCount} findings</span>
+          {run.approvalCount > 0 && (
+            <>
+              <span className="opacity-40">·</span>
+              <span className="text-warning">{run.approvalCount} approvals</span>
+            </>
+          )}
+        </div>
       </div>
     </button>
   );
 }
 
-function AuditFinding({ finding }) {
-  return (
-    <div className="rounded-lg border border-bg-border bg-bg-soft p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">
-            {finding.agentName}
-          </div>
-          <div className="mt-1 text-sm font-bold text-white/85">{finding.title}</div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {finding.approvalRequired && (
-            <span className="tag shrink-0 border border-yellow-500/30 bg-yellow-500/10 normal-case tracking-normal text-yellow-300">
-              approval
-            </span>
-          )}
-          <span className={`tag shrink-0 border normal-case tracking-normal ${severityStyles[finding.severity] ?? severityStyles.info}`}>
-            {finding.severity}
-          </span>
-        </div>
-      </div>
-      <p className="mt-2 text-xs leading-relaxed text-white/50">{finding.detail}</p>
-      <p className="mt-2 text-xs leading-relaxed text-white/35">{finding.recommendation}</p>
-    </div>
-  );
-}
-
 function ApolloAuditHistory({ auditState, selectedRunId, onSelectRun, onRefresh }) {
-  const selectedRun = auditState.runs.find((run) => run.id === selectedRunId) ?? auditState.runs[0] ?? null;
+  const selectedRun = auditState.runs.find((r) => r.id === selectedRunId) ?? auditState.runs[0] ?? null;
   const loading = auditState.status === "loading";
   const refreshing = auditState.status === "refreshing";
 
   return (
     <section className="card p-5">
-      <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-5">
         <div>
-          <div className="mb-2 flex items-center gap-2">
-            <Clock size={16} className="text-electric" />
+          <div className="flex items-center gap-2 mb-1.5">
+            <Clock size={15} className="text-info" />
             <h3 className="font-display font-bold">Audit History</h3>
           </div>
-          <p className="max-w-2xl text-sm leading-relaxed text-white/50">
-            Recorded Apollo runs and department findings. This is the trail we review before any background agent is allowed to run.
+          <p className="max-w-2xl text-sm text-white/45 leading-relaxed">
+            Recorded Apollo runs and department findings.
           </p>
         </div>
         <button
           type="button"
           onClick={() => onRefresh()}
           disabled={loading || refreshing}
-          className="btn btn-secondary justify-center disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn btn-secondary py-1.5 px-3 text-xs justify-center disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-          {refreshing ? "Refreshing..." : "Refresh history"}
+          <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+          {refreshing ? "Refreshing…" : "Refresh"}
         </button>
       </div>
 
       {auditState.error && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="mb-4 rounded-lg border border-danger-border bg-danger-soft px-4 py-3 text-sm text-danger">
           {auditState.error}
         </div>
       )}
 
-      {loading && (
-        <div className="flex items-center justify-center rounded-lg border border-bg-border bg-bg-soft py-10">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-        </div>
-      )}
+      {loading && <SkeletonList count={3} variant="card" />}
 
       {!loading && auditState.runs.length === 0 && !auditState.error && (
-        <div className="rounded-lg border border-bg-border bg-bg-soft p-8 text-center">
-          <div className="text-sm font-bold text-white/65">No Apollo audit runs yet</div>
-          <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-white/40">
-            Run a readiness check or department review to record the first audit entry.
-          </p>
-        </div>
+        <EmptyState
+          icon={<Clock size={24} />}
+          title="No audit runs yet"
+          body="Run a readiness check or department review to record the first entry."
+          variant="compact"
+        />
       )}
 
       {!loading && auditState.runs.length > 0 && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-          <div className="space-y-2">
+          {/* Run list */}
+          <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
             {auditState.runs.map((run) => (
               <AuditRunButton
                 key={run.id}
@@ -217,39 +221,44 @@ function ApolloAuditHistory({ auditState, selectedRunId, onSelectRun, onRefresh 
             ))}
           </div>
 
+          {/* Selected run detail */}
           <div className="rounded-lg border border-bg-border bg-bg-card2 p-4">
-            {selectedRun && (
-              <>
+            {selectedRun ? (
+              <Motion.div
+                key={selectedRun.id}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+              >
                 <div className="flex flex-col gap-3 border-b border-bg-border pb-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">
-                      {formatAuditDate(selectedRun.createdAt)}
-                    </div>
+                    <div className="text-[10px] text-white/35 font-semibold">{fmtDate(selectedRun.createdAt)}</div>
                     <div className="mt-1 font-display text-lg font-bold">{selectedRun.summary}</div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-white/40">
-                      <span>{formatRunType(selectedRun.runType)}</span>
-                      <span>/</span>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-white/40">
+                      <span>{fmtRunType(selectedRun.runType)}</span>
+                      <span className="opacity-40">·</span>
                       <span>{selectedRun.scope}</span>
-                      <span>/</span>
+                      <span className="opacity-40">·</span>
                       <span>{selectedRun.findingCount} findings</span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className={`tag border normal-case tracking-normal ${runStatusStyles[selectedRun.status] ?? runStatusStyles.queued}`}>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className={runStatusStyle[selectedRun.status] ?? runStatusStyle.queued}>
                       {selectedRun.status}
                     </span>
-                    <span className={`tag border normal-case tracking-normal ${severityStyles[selectedRun.topSeverity] ?? severityStyles.info}`}>
+                    <span className={severityStyle[selectedRun.topSeverity] ?? severityStyle.info}>
                       {selectedRun.topSeverity}
                     </span>
                   </div>
                 </div>
-
                 <div className="mt-4 space-y-2">
-                  {selectedRun.findings.map((finding) => (
-                    <AuditFinding key={finding.id} finding={finding} />
+                  {selectedRun.findings.map((f) => (
+                    <FindingRow key={f.id} finding={f} />
                   ))}
                 </div>
-              </>
+              </Motion.div>
+            ) : (
+              <div className="text-sm text-white/40 text-center py-8">Select a run to see findings</div>
             )}
           </div>
         </div>
@@ -258,54 +267,51 @@ function ApolloAuditHistory({ auditState, selectedRunId, onSelectRun, onRefresh 
   );
 }
 
+// ── Main component ───────────────────────────────────────────────────────────
+
 export default function ApolloCommandCenter({
   pendingProposalCount = 0,
   customDrillCount = 0,
   memberCount = 0,
 }) {
-  const [runnerState, setRunnerState] = useState({
-    status: "idle",
-    result: null,
-    error: "",
-  });
-  const [auditState, setAuditState] = useState({
-    status: "idle",
-    runs: [],
-    error: "",
-  });
+  const [runnerState, setRunnerState] = useState({ status: "idle", result: null, error: "", checkType: "" });
+  const [auditState, setAuditState] = useState({ status: "idle", runs: [], error: "" });
   const [selectedRunId, setSelectedRunId] = useState("");
+  const [sparklines, setSparklines] = useState(null);
   const findings = runnerState.result?.report?.findings ?? [];
-  const loadAuditHistory = useCallback(async (preferredRunId = "") => {
-    setAuditState((current) => ({
-      status: current.runs.length > 0 ? "refreshing" : "loading",
-      runs: current.runs,
-      error: "",
-    }));
 
+  const loadAuditHistory = useCallback(async (preferredRunId = "") => {
+    setAuditState((s) => ({ status: s.runs.length > 0 ? "refreshing" : "loading", runs: s.runs, error: "" }));
     try {
       const runs = await fetchApolloAuditHistory();
       setAuditState({ status: "success", runs, error: "" });
-      setSelectedRunId((current) => {
-        if (preferredRunId && runs.some((run) => run.id === preferredRunId)) return preferredRunId;
-        if (current && runs.some((run) => run.id === current)) return current;
+      setSelectedRunId((cur) => {
+        if (preferredRunId && runs.some((r) => r.id === preferredRunId)) return preferredRunId;
+        if (cur && runs.some((r) => r.id === cur)) return cur;
         return runs[0]?.id ?? "";
       });
-    } catch (error) {
-      setAuditState((current) => ({
-        status: "error",
-        runs: current.runs,
-        error: error instanceof Error ? error.message : "Apollo audit history could not load.",
+    } catch (err) {
+      setAuditState((s) => ({
+        status: "error", runs: s.runs,
+        error: err instanceof Error ? err.message : "Audit history could not load.",
       }));
     }
   }, []);
 
+  const loadSparklines = useCallback(async () => {
+    try {
+      const data = await fetchApolloSparklineData();
+      setSparklines(data);
+    } catch { /* non-critical: sparklines just stay null */ }
+  }, []);
+
   useEffect(() => {
     loadAuditHistory();
-  }, [loadAuditHistory]);
+    loadSparklines();
+  }, [loadAuditHistory, loadSparklines]);
 
   const runCheck = async (checkType) => {
     setRunnerState({ status: "loading", result: null, error: "", checkType });
-
     try {
       const result = checkType === "departments"
         ? await runApolloDepartmentReview()
@@ -314,162 +320,202 @@ export default function ApolloCommandCenter({
           : await runApolloReadinessCheck();
       setRunnerState({ status: "success", result, error: "", checkType });
       await loadAuditHistory(result.audit?.runId ?? "");
-    } catch (error) {
+      await loadSparklines();
+    } catch (err) {
       setRunnerState({
-        status: "error",
-        result: null,
-        error: error instanceof Error ? error.message : "Apollo runner could not complete.",
-        checkType,
+        status: "error", result: null, checkType,
+        error: err instanceof Error ? err.message : "Apollo runner could not complete.",
       });
     }
   };
 
+  // Map APOLLO_DEPARTMENTS to their agent key for sparkline lookup
+  const deptKeyMap = {
+    "Head of Security": "head_security",
+    "Head of Cyber":    "head_cyber",
+    "QA Lead":          "qa_lead",
+    "Drill Scout":      "drill_scout",
+  };
+
   return (
     <div className="space-y-5">
-      <section className="academy-panel p-5 md:p-6">
+
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <section className="academy-panel aura-info p-5 md:p-6">
         <div className="relative z-10 grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr] lg:items-center">
           <div>
             <div className="brand-overline mb-3">
               <Sparkles size={13} />
               Apollo Command
             </div>
-            <h2 className="font-display text-2xl md:text-3xl font-bold">Commander online, autonomy locked.</h2>
+            <h2 className="font-display text-2xl md:text-3xl font-bold leading-tight">
+              Commander online,<br className="hidden sm:block" /> autonomy locked.
+            </h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/55">
               Apollo is the command layer for GalGro's Academy. Every department reports upward,
               every risky action needs approval, and no agent gets to expand its own reach.
             </p>
-          </div>
-          <div className="rounded-lg border border-accent/15 bg-bg-soft/75 p-4">
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-accent/80">
-              <Shield size={13} />
-              Current mode
+            <div className="flex flex-wrap gap-2 mt-4">
+              <StatusDot
+                state={auditState.runs.some((r) => r.status === "completed") ? "live" : "idle"}
+                label={`${auditState.runs.filter((r) => r.status === "completed").length} successful runs`}
+              />
+              {pendingProposalCount > 0 && (
+                <StatusDot state="warn" label={`${pendingProposalCount} proposals pending`} />
+              )}
             </div>
-            <div className="font-display text-xl font-bold">Foundation only</div>
-            <p className="mt-2 text-sm text-white/50">
-              No background execution, no external tools, and no production changes are delegated yet.
-            </p>
+          </div>
+
+          {/* Metrics block */}
+          <div className="rounded-lg border border-accent/15 bg-bg-soft/75 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-accent/70 mb-2">
+              <Shield size={12} />
+              Live context
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <StatChip label="Members" value={memberCount} variant="neutral" icon={<Users size={11} />} />
+              <StatChip label="Proposals" value={pendingProposalCount} variant={pendingProposalCount > 0 ? "warning" : "neutral"} icon={<AlertTriangle size={11} />} />
+              <StatChip label="Custom drills" value={customDrillCount} variant="accent" icon={<Sparkles size={11} />} />
+              <StatChip label="Audit runs" value={auditState.runs.length} variant="info" icon={<Activity size={11} />} />
+            </div>
+            <div className="pt-2 border-t border-bg-border/50">
+              <div className="font-display text-lg font-bold text-white/90">Foundation only</div>
+              <p className="mt-1 text-xs text-white/45">
+                No background execution, no external tools, no production changes delegated yet.
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <CommandMetric
-          icon={Shield}
-          label="Control"
-          value="Approval gated"
-          detail="Apollo can coordinate, not bypass you."
-        />
-        <CommandMetric
-          icon={Bot}
-          label="Departments"
-          value={APOLLO_DEPARTMENTS.length}
-          detail="Security, Cyber, QA, Product, Performance, Drill Scout."
-        />
-        <CommandMetric
-          icon={Key}
-          label="Access"
-          value="Server-side"
-          detail="Future secrets stay outside the React app."
-        />
-        <CommandMetric
-          icon={Clock}
-          label="Heartbeat"
-          value="Dry run only"
-          detail="Scheduled runs stay locked until the gates are approved."
-        />
-      </section>
-
+      {/* ── Operations status ────────────────────────────────────────── */}
       <ApolloOperationsStatus />
 
+      {/* ── Departments with sparklines ──────────────────────────────── */}
+      <section className="card p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Bot size={15} className="text-info" />
+          <h3 className="font-display font-bold">Departments</h3>
+          <span className="chip chip-neutral ml-auto">{APOLLO_DEPARTMENTS.length} agents</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {APOLLO_DEPARTMENTS.map((dept) => {
+            const agentKey = deptKeyMap[dept.name];
+            const deptRuns = sparklines?.[agentKey] ?? [];
+            const lastRun = deptRuns[deptRuns.length - 1];
+
+            return (
+              <div key={dept.name} className="rounded-lg border border-bg-border bg-bg-soft p-4">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="font-bold text-sm">{dept.name}</div>
+                  <StatusPill status={dept.status} />
+                </div>
+
+                {/* Sparkline row */}
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <DepartmentSparkline runs={deptRuns} />
+                  {lastRun ? (
+                    <span className={`${runStatusStyle[lastRun.status] ?? runStatusStyle.queued} text-[10px]`}>
+                      last: {lastRun.status}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-white/30">no runs yet</span>
+                  )}
+                </div>
+
+                <p className="text-xs leading-relaxed text-white/50">{dept.scope}</p>
+                <p className="mt-2.5 border-t border-bg-border pt-2.5 text-xs leading-relaxed text-white/35">
+                  {dept.reports}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── Server-side Runner ───────────────────────────────────────── */}
       <section className="card p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-2">
-              <Shield size={16} className="text-accent" />
+            <div className="flex items-center gap-2 mb-1.5">
+              <Shield size={15} className="text-accent" />
               <h3 className="font-display font-bold">Server-side Runner</h3>
             </div>
-            <p className="max-w-2xl text-sm leading-relaxed text-white/50">
-              Manual readiness, department reviews, and heartbeat dry-runs. Uses your head-coach session for protected audit writes, and keeps future scheduler secrets on the server.
+            <p className="max-w-2xl text-sm text-white/45 leading-relaxed">
+              Manual readiness, department reviews, and heartbeat dry-runs. Uses your head-coach session for protected audit writes.
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:min-w-[560px]">
-            <button
-              type="button"
-              onClick={() => runCheck("readiness")}
-              disabled={runnerState.status === "loading"}
-              className="btn btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {runnerState.status === "loading" && runnerState.checkType === "readiness" ? "Checking..." : "Run readiness check"}
-            </button>
-            <button
-              type="button"
-              onClick={() => runCheck("departments")}
-              disabled={runnerState.status === "loading"}
-              className="btn btn-secondary justify-center disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {runnerState.status === "loading" && runnerState.checkType === "departments" ? "Reviewing..." : "Run department review"}
-            </button>
-            <button
-              type="button"
-              onClick={() => runCheck("heartbeat")}
-              disabled={runnerState.status === "loading"}
-              className="btn btn-secondary justify-center disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {runnerState.status === "loading" && runnerState.checkType === "heartbeat" ? "Dry running..." : "Run heartbeat dry run"}
-            </button>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:min-w-[540px]">
+            {[
+              { key: "readiness",  label: "Run readiness check",  loadingLabel: "Checking…" },
+              { key: "departments",label: "Run department review", loadingLabel: "Reviewing…" },
+              { key: "heartbeat",  label: "Heartbeat dry run",    loadingLabel: "Dry running…" },
+            ].map(({ key, label, loadingLabel }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => runCheck(key)}
+                disabled={runnerState.status === "loading"}
+                className={`btn justify-center disabled:cursor-not-allowed disabled:opacity-60 ${
+                  key === "readiness" ? "btn-primary" : "btn-secondary"
+                }`}
+              >
+                {runnerState.status === "loading" && runnerState.checkType === key
+                  ? <><RefreshCw size={13} className="animate-spin" />{loadingLabel}</>
+                  : label
+                }
+              </button>
+            ))}
           </div>
         </div>
 
-        {runnerState.error && (
-          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-            {runnerState.error}
-          </div>
-        )}
+        <AnimatePresence>
+          {runnerState.error && (
+            <Motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mt-4 rounded-lg border border-danger-border bg-danger-soft px-4 py-3 text-sm text-danger"
+            >
+              {runnerState.error}
+            </Motion.div>
+          )}
+        </AnimatePresence>
 
         {runnerState.result && (
-          <div className="mt-4 space-y-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">Runner</div>
-                <div className="mt-1 text-sm font-bold text-white/85">{runnerState.result.status}</div>
-              </div>
-              <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">Audit</div>
-                <div className="mt-1 text-sm font-bold text-white/85">{runnerState.result.audit?.status}</div>
-              </div>
-              <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">Mode</div>
-                <div className="mt-1 text-sm font-bold text-white/85">{runnerState.result.report?.mode}</div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              {findings.map((finding) => (
-                <div key={`${finding.agentKey ?? "apollo"}-${finding.title}`} className="rounded-lg border border-bg-border bg-bg-soft p-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">
-                        {finding.agentName ?? "Apollo"}
-                      </div>
-                      <div className="mt-1 text-sm font-bold text-white/85">{finding.title}</div>
-                    </div>
-                    <span className={`tag border shrink-0 normal-case tracking-normal ${severityStyles[finding.severity] ?? severityStyles.info}`}>
-                      {finding.severity}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs leading-relaxed text-white/50">{finding.detail}</p>
-                  <p className="mt-2 text-xs leading-relaxed text-white/35">{finding.recommendation}</p>
+          <Motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 space-y-4"
+          >
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Runner", value: runnerState.result.status },
+                { label: "Audit", value: runnerState.result.audit?.status },
+                { label: "Mode", value: runnerState.result.report?.mode },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-lg border border-bg-border bg-bg-soft p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">{label}</div>
+                  <div className="mt-1 text-sm font-bold text-white/85">{value}</div>
                 </div>
               ))}
             </div>
-          </div>
+            <div className="space-y-2">
+              {findings.map((f) => (
+                <FindingRow key={`${f.agentKey}-${f.title}`} finding={f} />
+              ))}
+            </div>
+          </Motion.div>
         )}
       </section>
 
+      {/* ── Chat ──────────────────────────────────────────────────────── */}
       <ApolloChat onAuditRecorded={loadAuditHistory} />
 
+      {/* ── Memory ────────────────────────────────────────────────────── */}
       <ApolloMemory />
 
+      {/* ── Audit history ─────────────────────────────────────────────── */}
       <ApolloAuditHistory
         auditState={auditState}
         selectedRunId={selectedRunId}
@@ -477,103 +523,64 @@ export default function ApolloCommandCenter({
         onRefresh={loadAuditHistory}
       />
 
+      {/* ── Charter + Departments reference ──────────────────────────── */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[0.85fr_1.15fr]">
         <div className="card p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <Shield size={16} className="text-accent" />
+          <div className="flex items-center gap-2 mb-4">
+            <Shield size={15} className="text-accent" />
             <h3 className="font-display font-bold">Apollo Charter</h3>
           </div>
-          <div className="space-y-3">
-            {APOLLO_PRINCIPLES.map((principle) => (
-              <div key={principle.label} className="rounded-lg border border-bg-border bg-bg-soft p-3">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">{principle.label}</div>
-                <div className="mt-1 text-sm font-semibold text-white/85">{principle.value}</div>
+          <div className="space-y-2">
+            {APOLLO_PRINCIPLES.map((p) => (
+              <div key={p.label} className="rounded-lg border border-bg-border bg-bg-soft p-3">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-white/35 mb-0.5">{p.label}</div>
+                <div className="text-sm font-semibold text-white/85">{p.value}</div>
               </div>
             ))}
           </div>
         </div>
 
         <div className="card p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <Bot size={16} className="text-electric" />
-            <h3 className="font-display font-bold">Departments</h3>
-          </div>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {APOLLO_DEPARTMENTS.map((department) => (
-              <div key={department.name} className="rounded-lg border border-bg-border bg-bg-soft p-4">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="font-bold text-sm">{department.name}</div>
-                  <StatusPill status={department.status} />
-                </div>
-                <p className="text-xs leading-relaxed text-white/55">{department.scope}</p>
-                <p className="mt-3 border-t border-bg-border pt-3 text-xs leading-relaxed text-white/40">{department.reports}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <div className="card p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-accent" />
-            <h3 className="font-display font-bold">Approval Gates</h3>
-          </div>
-          <div className="space-y-3">
-            {APOLLO_APPROVAL_TIERS.map((tier) => (
-              <div key={tier.tier} className="rounded-lg border border-bg-border bg-bg-soft p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="font-bold text-sm">{tier.tier}</div>
-                  <span className="text-[11px] font-semibold text-accent/80">{tier.authority}</span>
-                </div>
-                <p className="mt-2 text-xs leading-relaxed text-white/45">{tier.examples}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="card p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <Zap size={16} className="text-orange" />
+          <div className="flex items-center gap-2 mb-4">
+            <Zap size={15} className="text-orange" />
             <h3 className="font-display font-bold">Build Sequence</h3>
           </div>
-          <div className="space-y-3">
-            {APOLLO_FOUNDATION_STEPS.map((item) => (
-              <div key={item.step} className="rounded-lg border border-bg-border bg-bg-soft p-4">
+          <div className="space-y-2">
+            {APOLLO_FOUNDATION_STEPS.map((step) => (
+              <div key={step.step} className="rounded-lg border border-bg-border bg-bg-soft p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">{item.step}</div>
-                    <div className="mt-1 font-bold text-sm">{item.title}</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">{step.step}</div>
+                    <div className="mt-0.5 font-bold text-sm">{step.title}</div>
                   </div>
-                  <StatusPill status={item.status} />
+                  <StatusPill status={step.status} />
                 </div>
-                <p className="mt-2 text-xs leading-relaxed text-white/45">{item.detail}</p>
+                <p className="mt-1.5 text-xs text-white/45 leading-relaxed">{step.detail}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
+      {/* ── Approval gates ───────────────────────────────────────────── */}
       <section className="card p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <Users size={16} className="text-electric" />
-          <h3 className="font-display font-bold">Live Portal Context</h3>
+        <div className="flex items-center gap-2 mb-4">
+          <CheckCircle2 size={15} className="text-accent" />
+          <h3 className="font-display font-bold">Approval Gates</h3>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">Members</div>
-            <div className="mt-1 font-display text-2xl font-bold">{memberCount}</div>
-          </div>
-          <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">Drill proposals</div>
-            <div className="mt-1 font-display text-2xl font-bold">{pendingProposalCount}</div>
-          </div>
-          <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">Custom drills</div>
-            <div className="mt-1 font-display text-2xl font-bold">{customDrillCount}</div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {APOLLO_APPROVAL_TIERS.map((tier) => (
+            <div key={tier.tier} className="rounded-lg border border-bg-border bg-bg-soft p-4">
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between mb-2">
+                <div className="font-bold text-sm">{tier.tier}</div>
+                <span className="text-[11px] font-semibold text-accent/80">{tier.authority}</span>
+              </div>
+              <p className="text-xs text-white/45 leading-relaxed">{tier.examples}</p>
+            </div>
+          ))}
         </div>
       </section>
+
     </div>
   );
 }
