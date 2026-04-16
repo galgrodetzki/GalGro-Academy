@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
-import { Search, Clock, Zap, Package, ChevronRight, Sparkles } from "lucide-react";
+import { Search, Clock, Zap, Package, ChevronRight, Sparkles, Play } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import CategoryIcon from "../components/CategoryIcon";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
@@ -188,6 +188,18 @@ export default function DrillLibrary() {
               <span className="flex items-center gap-1.5"><Clock size={13} /> {selected.dur} min</span>
               <span className="flex items-center gap-1.5"><Zap size={13} /> {selected.reps}</span>
             </div>
+
+            {selected.video && (
+              <a
+                href={selected.video}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 mb-6 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all text-sm font-semibold"
+              >
+                <Play size={16} fill="currentColor" />
+                Watch on YouTube
+              </a>
+            )}
 
             <Section title="Description">{selected.desc}</Section>
             <Section title="Coaching Points">{selected.cp}</Section>
