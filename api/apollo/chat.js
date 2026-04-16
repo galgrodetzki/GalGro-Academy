@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
 import { buildApolloContextPacks } from "./contextPacks.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL
@@ -10,8 +11,11 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
   ?? process.env.VITE_SUPABASE_ANON_KEY
   ?? "sb_publishable_-Sp_uIuA8o1I7nvp-aMxdQ_Y_OLNc1Y";
 
-const APOLLO_MODEL = process.env.APOLLO_MODEL ?? "openai/gpt-5.4";
-const MODEL_ACCESS_CONFIGURED = Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
+// Strip provider prefix if present (e.g. "openai/gpt-5-mini" -> "gpt-5-mini")
+const APOLLO_MODEL = (process.env.APOLLO_MODEL ?? "gpt-5-mini").replace(/^openai\//, "");
+const MODEL_ACCESS_CONFIGURED = Boolean(
+  process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN
+);
 const MAX_MESSAGE_LENGTH = 1200;
 
 const JSON_HEADERS = {
@@ -165,13 +169,13 @@ async function buildApolloReply({ message, context, actor }) {
       mode: "grounded_fallback",
       model: null,
       reply: fallback,
-      modelStatus: "AI Gateway auth is not configured, so Apollo answered from deterministic context packs.",
+      modelStatus: "No model auth is configured, so Apollo answered from deterministic context packs.",
     };
   }
 
   try {
     const { text } = await generateText({
-      model: APOLLO_MODEL,
+      model: openai(APOLLO_MODEL),
       system: [
         "You are Apollo, the command layer for GalGro's Academy.",
         "Use only the approved context packs in the prompt. If the context does not support an answer, say what is missing.",

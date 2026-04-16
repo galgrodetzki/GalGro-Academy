@@ -12,12 +12,14 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RUNNER_SECRET = process.env.APOLLO_RUNNER_SECRET ?? process.env.CRON_SECRET;
 const HEARTBEAT_ENABLED = process.env.APOLLO_HEARTBEAT_ENABLED === "true";
-const APOLLO_MODEL = process.env.APOLLO_MODEL ?? "openai/gpt-5.4";
-const MODEL_AUTH_MODE = process.env.AI_GATEWAY_API_KEY
-  ? "ai_gateway_key"
-  : process.env.VERCEL_OIDC_TOKEN
-    ? "vercel_oidc"
-    : "locked";
+const APOLLO_MODEL = (process.env.APOLLO_MODEL ?? "gpt-5-mini").replace(/^openai\//, "");
+const MODEL_AUTH_MODE = process.env.OPENAI_API_KEY
+  ? "openai_api_key"
+  : process.env.AI_GATEWAY_API_KEY
+    ? "ai_gateway_key"
+    : process.env.VERCEL_OIDC_TOKEN
+      ? "vercel_oidc"
+      : "locked";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -106,7 +108,7 @@ async function handleStatus(request) {
       mode: modelConfigured ? "server_model_ready" : "grounded_fallback_only",
       message: modelConfigured
         ? "Apollo can use the server model path for chat responses."
-        : "Apollo will keep using deterministic context-pack answers until AI Gateway auth or Vercel OIDC is available server-side.",
+        : "Apollo will keep using deterministic context-pack answers until an OpenAI key, AI Gateway key, or Vercel OIDC token is available server-side.",
     },
     heartbeat: {
       armed: heartbeatArmed,
