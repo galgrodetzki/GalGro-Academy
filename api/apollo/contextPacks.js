@@ -7,7 +7,7 @@ const MEMORY_SENSITIVITY_LIMIT = process.env.APOLLO_CONTEXT_SENSITIVITY ?? DEFAU
 export const APOLLO_ROADMAP = [
   "13A Command Foundation: complete.",
   "13B Server-side Runner: foundation done; manual audit records are visible.",
-  "13C Department Agents: foundation done for Security, Cyber, and QA in read-only mode.",
+  "13C Department Agents: active. Security, Cyber, QA, and Drill Scout run live data-driven checks (expired profiles, unlinked players, session gaps, stale proposals, pipeline health) on every heartbeat.",
   "13D Apollo Chat: context packs and editable memory are active; model-backed reasoning is server-gated.",
   "13E Model Access: complete. OpenAI key configured server-side; model-backed chat active via @ai-sdk/openai (gpt-5-mini). Falls back to deterministic context packs on failure.",
   "13F Background Heartbeat: complete. Daily cron at 09:00 UTC active via vercel.json. APOLLO_HEARTBEAT_ENABLED, CRON_SECRET, and SUPABASE_SERVICE_ROLE_KEY all configured. Manual smoke test passed; audit entry confirmed.",
