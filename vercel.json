@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/apollo/runner",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}
