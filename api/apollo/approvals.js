@@ -152,7 +152,7 @@ async function handleList(request, auth) {
   return json({ approvals: enriched });
 }
 
-async function handleDecide(request, auth) {
+async function handlePost(request, auth) {
   let body;
   try {
     body = await request.json();
@@ -160,6 +160,16 @@ async function handleDecide(request, auth) {
     return json({ error: "Invalid JSON body." }, 400);
   }
 
+  // 13J-1: POST now has two modes.
+  //   mode = "decide" (default) — head coach approves or rejects a pending row
+  //   mode = "retry"            — re-execute an approved row whose execution errored
+  const mode = body?.mode ?? "decide";
+  if (mode === "retry") return handleRetry(body, auth);
+  if (mode === "decide") return handleDecide(body, auth);
+  return json({ error: "Unknown mode. Use 'decide' or 'retry'." }, 400);
+}
+
+async function handleDecide(body, auth) {
   const { approvalId, decision, notes = "" } = body ?? {};
   if (!approvalId || !["approve", "reject"].includes(decision)) {
     return json({ error: "Body needs { approvalId, decision: 'approve' | 'reject', notes? }" }, 400);
@@ -250,12 +260,89 @@ async function handleDecide(request, auth) {
   }
 }
 
+// 13J-1: Re-execute a previously-approved action whose initial execution
+// failed. Only rows with status = "approved" AND execution_error IS NOT NULL
+// are retryable. Success flips to "completed" and clears the error; failure
+// updates execution_error and keeps the row retryable.
+async function handleRetry(body, auth) {
+  const { approvalId } = body ?? {};
+  if (!approvalId) {
+    return json({ error: "Retry needs { approvalId }." }, 400);
+  }
+
+  const client = makeSupabaseClient(SUPABASE_ANON_KEY, auth.accessToken);
+  const { data: approval, error: loadError } = await client
+    .from("apollo_approvals")
+    .select("id,status,action_key,action_payload,execution_error")
+    .eq("id", approvalId)
+    .single();
+
+  if (loadError || !approval) {
+    return json({ error: "Approval not found." }, 404);
+  }
+
+  if (approval.status !== "approved") {
+    return json({
+      error: `Cannot retry: approval status is "${approval.status}". Only "approved" rows with an execution error can be retried.`,
+    }, 409);
+  }
+
+  if (!approval.execution_error) {
+    return json({ error: "Nothing to retry — previous execution did not error." }, 409);
+  }
+
+  const tierInfo = resolveTier(approval.action_key);
+  if (!tierInfo.found || tierInfo.tier === "forbidden") {
+    // Action was removed or demoted since the approval was created. Don't re-execute.
+    return json({
+      error: `Action "${approval.action_key}" is no longer executable.`,
+    }, 409);
+  }
+
+  const executionClient = getExecutionClient(auth.accessToken);
+  const result = await executeAction({
+    actionKey: approval.action_key,
+    payload: approval.action_payload ?? {},
+    ctx: { supabase: executionClient, actor: auth.actor },
+  });
+
+  if (result.ok) {
+    const { error: updateError } = await client
+      .from("apollo_approvals")
+      .update({
+        status: "completed",
+        executed_at: new Date().toISOString(),
+        execution_result: result.result ?? {},
+        execution_error: null,
+      })
+      .eq("id", approvalId);
+    if (updateError) {
+      // Execution succeeded but we couldn't mark it. Surface so the head coach
+      // knows the side effect happened even if the row still looks stuck.
+      return json({
+        ok: true,
+        status: "completed",
+        result: result.result ?? {},
+        warning: `Execution succeeded but row update failed: ${updateError.message}`,
+      });
+    }
+    return json({ ok: true, status: "completed", result: result.result ?? {} });
+  }
+
+  // Still failing — update the error and leave the row retryable.
+  await client
+    .from("apollo_approvals")
+    .update({ execution_error: result.error ?? "Unknown executor error" })
+    .eq("id", approvalId);
+  return json({ ok: false, status: "approved", executed: false, error: result.error }, 200);
+}
+
 async function handleRequest(request) {
   const auth = await authorizeHeadCoach(request);
   if (!auth.ok) return json({ error: auth.error }, auth.status);
 
   if (request.method === "GET") return handleList(request, auth);
-  if (request.method === "POST") return handleDecide(request, auth);
+  if (request.method === "POST") return handlePost(request, auth);
   return json({ error: "Method not allowed." }, 405);
 }
 

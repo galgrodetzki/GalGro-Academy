@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2, XCircle, ShieldCheck, Clock, RefreshCw,
-  AlertTriangle, Inbox, History, Loader2, MessageSquareMore,
+  AlertTriangle, Inbox, History, Loader2, MessageSquareMore, RotateCcw,
 } from "lucide-react";
-import { fetchApprovals, decideApproval } from "../lib/apolloApprovals";
+import { fetchApprovals, decideApproval, retryApprovalExecution } from "../lib/apolloApprovals";
 import { SkeletonList } from "./ui/Skeleton";
 import EmptyState from "./ui/EmptyState";
 
@@ -44,6 +44,21 @@ function fmtDate(v) {
   if (!v) return "—";
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? "—" : dateFmt.format(d);
+}
+
+// 13J-2: pull a human-readable one-liner out of an action's execution_result.
+// Actions return arbitrary JSON (profile IDs, proposal IDs, role flips,
+// skipped reasons) — we strip bare IDs and keep the meaningful keys so the
+// inbox shows "role: revoked" instead of a wall of UUIDs.
+function fmtExecutionResult(result) {
+  if (!result || typeof result !== "object") return null;
+  const entries = Object.entries(result).filter(([k, v]) => {
+    if (v === null || v === undefined || v === "") return false;
+    // Hide raw ID fields — they add noise without telling you what happened.
+    return !/id$/i.test(k);
+  });
+  if (entries.length === 0) return "executed";
+  return entries.map(([k, v]) => `${k}: ${v}`).join(" · ");
 }
 
 // ── Row ─────────────────────────────────────────────────────────────────────
@@ -148,9 +163,14 @@ function PendingApprovalRow({ approval, onDecide, busy }) {
   );
 }
 
-function DecidedApprovalRow({ approval }) {
+function DecidedApprovalRow({ approval, onRetry, retrying }) {
   const finding = approval.finding;
   const status = approval.status;
+  // 13J-1: retry is only offered when the server will actually allow it —
+  // status "approved" with an execution_error set. Any other state (rejected,
+  // completed, or approved-without-error) means there's nothing to retry.
+  const canRetry = status === "approved" && Boolean(approval.execution_error);
+  const resultSummary = fmtExecutionResult(approval.execution_result);
 
   return (
     <div className="rounded-lg border border-bg-border/60 bg-bg-soft/50 px-4 py-3">
@@ -167,15 +187,36 @@ function DecidedApprovalRow({ approval }) {
           {approval.decision_notes && (
             <div className="mt-1 text-[11px] italic text-white/40">"{approval.decision_notes}"</div>
           )}
+          {/* 13J-2: show what actually happened on successful executions. */}
+          {status === "completed" && resultSummary && (
+            <div className="mt-1 text-[11px] text-success">
+              ✓ {resultSummary}
+            </div>
+          )}
           {approval.execution_error && (
             <div className="mt-1 text-[11px] text-danger">
               Execution error: {approval.execution_error}
             </div>
           )}
         </div>
-        <span className={`${decisionStyle[status] ?? decisionStyle.pending} flex-shrink-0`}>
-          {status}
-        </span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {canRetry && onRetry && (
+            <button
+              type="button"
+              onClick={() => onRetry(approval.id)}
+              disabled={retrying}
+              className="btn btn-secondary py-1 px-2 text-[11px] disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {retrying
+                ? <Loader2 size={11} className="animate-spin" />
+                : <RotateCcw size={11} />}
+              Retry
+            </button>
+          )}
+          <span className={`${decisionStyle[status] ?? decisionStyle.pending}`}>
+            {status}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -227,6 +268,25 @@ export default function ApolloApprovalInbox({ onChange }) {
       onChange?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : `Could not ${decision} approval.`);
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  // 13J-1: re-run an approved action whose execution errored. Shares busyId
+  // with decide so a single approval can't be acted on twice in parallel.
+  const handleRetry = async (approvalId) => {
+    setBusyId(approvalId);
+    setError("");
+    try {
+      const result = await retryApprovalExecution({ approvalId });
+      if (result.ok === false && result.error) {
+        setError(`Retry still failed: ${result.error}`);
+      }
+      await load("refresh");
+      onChange?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not retry approval.");
     } finally {
       setBusyId("");
     }
@@ -336,7 +396,11 @@ export default function ApolloApprovalInbox({ onChange }) {
                     onDecide={handleDecide}
                   />
                 ) : (
-                  <DecidedApprovalRow approval={approval} />
+                  <DecidedApprovalRow
+                    approval={approval}
+                    onRetry={handleRetry}
+                    retrying={busyId === approval.id}
+                  />
                 )}
               </Motion.div>
             ))}
