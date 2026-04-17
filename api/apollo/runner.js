@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { runDepartmentAgents } from "./departmentAgents.js";
+import { executeAction, resolveTier } from "./actionExecutor.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL
   ?? process.env.VITE_SUPABASE_URL
@@ -408,16 +409,104 @@ async function persistAuditRun(report, actor, accessToken) {
       actorSource: actor.source,
       runType: report.runType,
       agentName: finding.agentName ?? "Apollo",
+      // Agents attach action specs via finding.action = { key, payload }.
+      // The action key must be registered in actionExecutor.js — unknown
+      // keys are ignored (no execution, no approval row).
+      actionKey: finding.action?.key ?? null,
+      actionPayload: finding.action?.payload ?? null,
     },
   }));
 
-  const { error: findingsError } = await auditClient.from("apollo_findings").insert(rows);
+  const { data: insertedFindings, error: findingsError } = await auditClient
+    .from("apollo_findings")
+    .insert(rows)
+    .select("id,title,severity,agent_key,approval_required,metadata");
   if (findingsError) {
     console.error("Apollo finding write failed", findingsError.message);
     return { status: "partial", runId: run.id, message: "Run recorded, but findings could not be stored." };
   }
 
-  return { status: "recorded", runId: run.id, message: "Run and findings recorded." };
+  // Process actions attached to findings.
+  //   observe             → execute immediately, update finding
+  //   recommend / req     → create an approval row, wait for Gal
+  //   forbidden / unknown → skip silently (finding itself is still recorded)
+  const actionOutcomes = await processFindingActions(insertedFindings ?? [], {
+    supabase: auditClient,
+    actor,
+  });
+
+  return {
+    status: "recorded",
+    runId: run.id,
+    message: "Run and findings recorded.",
+    actions: actionOutcomes,
+  };
+}
+
+async function processFindingActions(findings, ctx) {
+  const outcomes = {
+    executed: 0,
+    approvalsCreated: 0,
+    skipped: 0,
+    errors: [],
+  };
+
+  for (const finding of findings) {
+    const actionKey = finding.metadata?.actionKey;
+    if (!actionKey) {
+      outcomes.skipped += 1;
+      continue;
+    }
+
+    const tierInfo = resolveTier(actionKey);
+    if (!tierInfo.found || tierInfo.tier === "forbidden") {
+      outcomes.skipped += 1;
+      continue;
+    }
+
+    const payload = {
+      ...(finding.metadata?.actionPayload ?? {}),
+      findingId: finding.id,
+    };
+
+    if (tierInfo.tier === "observe") {
+      // Auto-execute: Apollo's autonomous housekeeping lane.
+      const result = await executeAction({ actionKey, payload, ctx });
+      if (result.ok) {
+        outcomes.executed += 1;
+      } else {
+        outcomes.errors.push({ findingId: finding.id, actionKey, error: result.error });
+      }
+      continue;
+    }
+
+    // recommend or approval_required → create an approval row
+    const { error: approvalError } = await ctx.supabase
+      .from("apollo_approvals")
+      .insert({
+        finding_id: finding.id,
+        action_key: actionKey,
+        action_label: tierInfo.label,
+        action_payload: payload,
+        autonomy_tier: tierInfo.tier,
+        risk_level: mapSeverityToRisk(finding.severity),
+        status: "pending",
+        requested_by: finding.agent_key ?? "apollo",
+      });
+    if (approvalError) {
+      outcomes.errors.push({ findingId: finding.id, actionKey, error: approvalError.message });
+    } else {
+      outcomes.approvalsCreated += 1;
+    }
+  }
+
+  return outcomes;
+}
+
+function mapSeverityToRisk(severity) {
+  if (severity === "critical" || severity === "high") return "high";
+  if (severity === "medium") return "medium";
+  return "low";
 }
 
 async function handleRun(request) {

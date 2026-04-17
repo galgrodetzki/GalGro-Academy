@@ -12,7 +12,7 @@ import CategoryIcon from "../components/CategoryIcon";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import { DRILLS, CATEGORIES } from "../data/drills";
-import { modalBackdropMotion, modalPanelMotion } from "../utils/motion";
+import { modalBackdropMotion, modalPanelMotion, staggerContainer, staggerItem } from "../utils/motion";
 import { clearSessionNavIntent, readSessionNavIntent } from "../utils/sessionNavIntent";
 
 const playerById = (players, id) => players.find((p) => p.id === id);
@@ -251,29 +251,36 @@ export default function MySessions() {
             : "Sessions marked as Completed will appear here."}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <Motion.div
+          key={tab}
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
+        >
           {displayed.map((s) => (
-            <SessionCard
-              key={s.id}
-              session={s}
-              tab={tab}
-              players={players}
-              drills={allDrills}
-              canEdit={canEdit}
-              reflectionStatus={
-                canSaveKeeperReflection(s)
-                  ? keeperNotes.some((note) => note.sessionId === s.id && note.playerId === currentPlayer?.id)
-                    ? "saved"
-                    : "needed"
-                  : null
-              }
-              onView={() => setViewingId(s.id)}
-              onDelete={() => removeSession(s.id)}
-              onMarkCompleted={() => markCompleted(s.id)}
-              onRecap={() => openRecap(s)}
-            />
+            <Motion.div key={s.id} variants={staggerItem}>
+              <SessionCard
+                session={s}
+                tab={tab}
+                players={players}
+                drills={allDrills}
+                canEdit={canEdit}
+                reflectionStatus={
+                  canSaveKeeperReflection(s)
+                    ? keeperNotes.some((note) => note.sessionId === s.id && note.playerId === currentPlayer?.id)
+                      ? "saved"
+                      : "needed"
+                    : null
+                }
+                onView={() => setViewingId(s.id)}
+                onDelete={() => removeSession(s.id)}
+                onMarkCompleted={() => markCompleted(s.id)}
+                onRecap={() => openRecap(s)}
+              />
+            </Motion.div>
           ))}
-        </div>
+        </Motion.div>
       )}
 
       {/* Detail view modal */}

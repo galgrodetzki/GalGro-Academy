@@ -74,3 +74,39 @@ Apollo Chat moves from grounded fallback only to model-backed when server auth i
 - Audit run recorded at mode: model (no error level in serverless logs)
 - Fallback resilience proven by earlier AI Gateway failures — all gracefully returned deterministic context-pack answers with 200 status, no 500s
 **Status:** ✅ Active
+
+---
+
+## 13G + 13H + 13I Record — Action System Live
+
+**Date:** 2026-04-17
+
+Apollo moved from advisory-only to an executing command layer. Three sequential checkpoints:
+
+### 13G — Approval Inbox plumbing
+- Migration `apollo_13g_extend_approvals_for_execution` added `action_payload`, `execution_result`, `execution_error`, `executed_at`, `autonomy_tier` to `apollo_approvals`.
+- `api/apollo/actionExecutor.js` introduced the central registry. Tiers: `observe` (auto-executes), `recommend` + `approval_required` (queues approval row), `forbidden` (never runs). `FORBIDDEN_CATEGORIES` hardcoded: `secret_exposure`, `destructive_test`, `third_party_attack`, `credential_dump`, `auth_bypass`.
+- `api/apollo/runner.js` now reads `finding.action = { key, payload }` after findings persist, dispatches via `processFindingActions`.
+- `api/apollo/approvals.js` (GET/POST) lets head coach list and decide. Approve → calls `executeAction` with the service-role client; result/error persists on the row. Reject just closes.
+- `ApolloApprovalInbox` wired into the Command Center directly under Operations Status.
+
+### 13H — Department agents got real actions
+| Agent | Action key | Tier | What it does |
+|---|---|---|---|
+| Head of Security | `access.revoke` | approval_required | Flips `profiles.role = 'revoked'` for expired-but-active profiles. One finding per profile so each gets its own approval card. |
+| QA Lead | `proposal.retire_stale` | recommend | Rejects `agent_proposals` pending > 7 days. One finding per stale proposal. Idempotent (only flips if still pending). |
+| Drill Scout | `proposal.create` | observe | Replaced the old inline `agent_proposals` insert. DrillScout now emits one finding per proposed drill; the observe lane writes it. Keeps all side effects audit-visible through the action executor. |
+| Head of Cyber | — | — | Still advisory-only in 13H. Scope is passive review; no safe auto-action identified yet. |
+
+### 13I — Memory seed + docs
+- Seeded `apollo_memory` via migration `apollo_13i_seed_memory` with 10 durable entries across `project`, `preference`, `decision`, `security`, `roadmap` types. Idempotent on `memory_key`. Covers: Academy identity, stack summary, Gal's collaboration style, DrillScout taste bar, head-coach-only auth, staged autonomy tiers, model path, secret boundaries, forbidden actions, shipped-checkpoints roadmap.
+- Activation record above stays intact; this section appends the action-system arc.
+
+### Hard rules still honored
+- No new `VITE_` env. No browser-exposed secrets. Service-role key used only server-side for action execution.
+- No background writes without either a head-coach session or cron secret.
+- No action elevates its own tier; forbidden actions cannot be registered.
+- Observe actions only reach safe, reversible side effects (status flips on apollo_findings, proposal queueing).
+- DrillScout autonomy is bounded by proposal count + library-size ceilings (stops at 3 pending or 20 approved).
+
+### Status: ✅ Action system live, end-to-end

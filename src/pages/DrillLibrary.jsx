@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion as Motion } from "framer-motion";
-import { Search, Clock, Zap, Package, ChevronRight, Sparkles, Play, SearchX, Map } from "lucide-react";
+import { Search, Clock, Zap, Package, ChevronRight, Sparkles, Play, SearchX, Map, Maximize2, X } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import CategoryIcon from "../components/CategoryIcon";
 import EmptyState from "../components/ui/EmptyState";
@@ -9,7 +9,8 @@ import { DRILL_DIAGRAMS, getCategoryFallbackDiagram } from "../data/drillDiagram
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useScrollLock } from "../hooks/useScrollLock";
 import { useData } from "../context/DataContext";
-import { drillCardHover, modalBackdropMotion, modalPanelMotion } from "../utils/motion";
+import { drillCardHover, modalBackdropMotion, modalPanelMotion, staggerContainer, staggerItem } from "../utils/motion";
+import { getYouTubeThumbnail, hasPlayableVideo } from "../utils/youtube";
 
 const INT_COLORS = {
   Low: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -24,6 +25,15 @@ export default function DrillLibrary() {
   const [cat, setCat] = useState("all");
   const [intensity, setIntensity] = useState("all");
   const [selected, setSelected] = useState(null);
+  const [zoomedDiagram, setZoomedDiagram] = useState(null);
+
+  // ESC to dismiss the diagram lightbox
+  useEffect(() => {
+    if (!zoomedDiagram) return;
+    const onKey = (e) => { if (e.key === "Escape") setZoomedDiagram(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zoomedDiagram]);
 
   // Merge static + approved custom drills
   const allDrills = useMemo(() => [...DRILLS, ...customDrills], [customDrills]);
@@ -44,7 +54,7 @@ export default function DrillLibrary() {
   }, [allDrills, search, cat, intensity]);
 
   const catInfo = (key) => CATEGORIES.find((c) => c.key === key);
-  useScrollLock(!!selected);
+  useScrollLock(!!selected || !!zoomedDiagram);
 
   return (
     <div>
@@ -115,12 +125,19 @@ export default function DrillLibrary() {
       </div>
 
       {/* Drill grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+      <Motion.div
+        key={`${cat}-${intensity}-${search}`}
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
+      >
         {filtered.map((d) => {
           const info = catInfo(d.cat);
           return (
             <Motion.button
               key={d.id}
+              variants={staggerItem}
               whileHover={drillCardHover}
               onClick={() => setSelected(d)}
               className="card card-hover p-4 text-left group"
@@ -159,13 +176,21 @@ export default function DrillLibrary() {
                       <Map size={11} />
                     </span>
                   )}
+                  {hasPlayableVideo(d.video) && (
+                    <span
+                      className="flex items-center gap-1 text-red-400/80"
+                      title="Has video"
+                    >
+                      <Play size={11} fill="currentColor" />
+                    </span>
+                  )}
                 </div>
                 <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 group-hover:text-accent transition-all" />
               </div>
             </Motion.button>
           );
         })}
-      </div>
+      </Motion.div>
 
       {filtered.length === 0 && (
         <EmptyState
@@ -210,17 +235,46 @@ export default function DrillLibrary() {
               <span className="flex items-center gap-1.5"><Zap size={13} /> {selected.reps}</span>
             </div>
 
-            {selected.video && (
-              <a
-                href={selected.video}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2.5 mb-5 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all text-sm font-semibold"
-              >
-                <Play size={16} fill="currentColor" />
-                Watch on YouTube
-              </a>
-            )}
+            {selected.video && (() => {
+              const thumb = getYouTubeThumbnail(selected.video, "hq");
+              return thumb ? (
+                <a
+                  href={selected.video}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group relative block mb-5 overflow-hidden rounded-lg border border-bg-border aspect-video bg-bg-card2"
+                  title="Watch on YouTube"
+                >
+                  <img
+                    src={thumb}
+                    alt={`${selected.name} — video thumbnail`}
+                    loading="lazy"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="flex items-center justify-center w-14 h-14 rounded-full bg-red-500 text-white shadow-lg transition-transform duration-200 group-hover:scale-110">
+                      <Play size={22} fill="currentColor" className="translate-x-[1px]" />
+                    </span>
+                  </div>
+                  <div className="absolute bottom-2 left-3 right-3 text-[11px] font-semibold text-white/85 flex items-center gap-1.5">
+                    <span className="px-1.5 py-0.5 rounded bg-red-500/90 text-white">YouTube</span>
+                    <span className="truncate">Tap to watch</span>
+                  </div>
+                </a>
+              ) : (
+                <a
+                  href={selected.video}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2.5 mb-5 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all text-sm font-semibold"
+                >
+                  <Play size={16} fill="currentColor" />
+                  Search on YouTube
+                </a>
+              );
+            })()}
 
             {(() => {
               const diagram = DRILL_DIAGRAMS[selected.id]
@@ -234,8 +288,21 @@ export default function DrillLibrary() {
                         · generic layout for this category
                       </span>
                     )}
+                    <span className="text-[10px] font-normal normal-case text-white/30 tracking-normal ml-auto flex items-center gap-1">
+                      <Maximize2 size={10} /> tap to expand
+                    </span>
                   </div>
-                  <DrillDiagram diagram={diagram} />
+                  <button
+                    type="button"
+                    onClick={() => setZoomedDiagram(diagram)}
+                    className="group relative block w-full rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-accent/50"
+                    aria-label="Expand diagram"
+                  >
+                    <DrillDiagram diagram={diagram} />
+                    <span className="absolute top-2 right-2 flex items-center justify-center w-7 h-7 rounded-md bg-black/60 text-white/80 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Maximize2 size={13} />
+                    </span>
+                  </button>
                 </div>
               ) : null;
             })()}
@@ -266,6 +333,36 @@ export default function DrillLibrary() {
             </button>
           </Motion.div>
         </Motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Diagram lightbox — sits above the detail modal */}
+      <AnimatePresence>
+        {zoomedDiagram && (
+          <Motion.div
+            className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-md flex items-center justify-center p-3 md:p-8"
+            onClick={() => setZoomedDiagram(null)}
+            {...modalBackdropMotion}
+          >
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setZoomedDiagram(null); }}
+              className="absolute top-4 right-4 md:top-6 md:right-6 flex items-center justify-center w-10 h-10 rounded-full bg-bg-card2 border border-bg-border text-white/80 hover:text-white hover:bg-bg-card transition-colors"
+              aria-label="Close diagram"
+            >
+              <X size={18} />
+            </button>
+            <Motion.div
+              className="w-full max-w-4xl"
+              onClick={(e) => e.stopPropagation()}
+              {...modalPanelMotion}
+            >
+              <DrillDiagram diagram={zoomedDiagram} />
+              <div className="mt-3 text-center text-[11px] text-white/35 font-semibold tracking-wide uppercase">
+                Tap anywhere or press Esc to close
+              </div>
+            </Motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
     </div>

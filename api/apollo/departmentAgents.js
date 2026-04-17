@@ -21,7 +21,16 @@ const DEPARTMENT_AGENT_PROFILES = [
   },
 ];
 
-function finding({ agent, title, severity = "info", category, detail, recommendation, approvalRequired = false }) {
+function finding({
+  agent,
+  title,
+  severity = "info",
+  category,
+  detail,
+  recommendation,
+  approvalRequired = false,
+  action = null,
+}) {
   return {
     agentKey: agent.key,
     agentName: agent.name,
@@ -31,6 +40,12 @@ function finding({ agent, title, severity = "info", category, detail, recommenda
     detail,
     recommendation,
     approvalRequired,
+    // action: { key, payload } — optional. The runner reads this via
+    // finding.metadata.actionKey after the finding is persisted, then:
+    //   observe            → executeAction() runs immediately
+    //   recommend / req    → an apollo_approvals row is queued for Gal
+    //   forbidden / unknown → skipped, finding stays advisory
+    action,
   };
 }
 
@@ -98,14 +113,24 @@ function runSecurityAgent(config, portalData) {
       (p) => p.access_expires_on && p.access_expires_on < today && p.role !== "revoked"
     );
     if (expiredActive.length > 0) {
-      findings.push(finding({
-        agent,
-        title: `${expiredActive.length} profile${expiredActive.length > 1 ? "s have" : " has"} expired but ${expiredActive.length > 1 ? "are" : "is"} not revoked`,
-        severity: "medium",
-        category: "access",
-        detail: `${expiredActive.length} profile(s) have access_expires_on in the past but role is not set to revoked. RLS blocks their DB access, but their role label is misleading.`,
-        recommendation: "Review these profiles in Admin → Access and either extend their expiry or set role to revoked.",
-      }));
+      // One finding per profile — each gets its own approval card so Gal can
+      // decide profile-by-profile. Tier is approval_required on the action.
+      for (const profile of expiredActive) {
+        const label = profile.name || profile.id;
+        findings.push(finding({
+          agent,
+          title: `Revoke access: ${label}`,
+          severity: "medium",
+          category: "access",
+          detail: `Profile "${label}" (role: ${profile.role}) expired on ${profile.access_expires_on}. RLS already blocks their DB access — this action makes the role label consistent by setting role = "revoked".`,
+          recommendation: "Approve to flip the role, reject to keep the current label (e.g. if expiry will be extended instead).",
+          approvalRequired: true,
+          action: {
+            key: "access.revoke",
+            payload: { profileId: profile.id, profileName: label },
+          },
+        }));
+      }
     } else {
       findings.push(finding({
         agent,
@@ -250,7 +275,9 @@ function runQaAgent(config, portalData) {
     }));
   }
 
-  // Stale pending proposals
+  // Stale pending proposals — one finding per proposal so each gets its own
+  // approval card. Action is recommend-tier: reversible cleanup that still
+  // deserves a conscious "yes".
   if (portalData.proposals.rows.length > 0) {
     const stale = portalData.proposals.rows.filter((p) => {
       if (p.status !== "pending") return false;
@@ -259,14 +286,21 @@ function runQaAgent(config, portalData) {
       );
       return daysOld > STALE_DAYS;
     });
-    if (stale.length > 0) {
+    for (const proposal of stale) {
+      const daysOld = Math.floor(
+        (new Date(today) - new Date(proposal.created_at)) / (1000 * 60 * 60 * 24)
+      );
       findings.push(finding({
         agent,
-        title: `${stale.length} drill proposal${stale.length > 1 ? "s have" : " has"} been pending for over ${STALE_DAYS} days`,
+        title: `Retire stale proposal: ${proposal.name}`,
         severity: "low",
         category: "portal_usage",
-        detail: `Stale proposal(s) in the inbox: ${stale.map((p) => p.name).join(", ")}.`,
-        recommendation: "Review pending proposals in Admin → Agent Inbox. Approve useful drills or reject to keep the pipeline clean.",
+        detail: `"${proposal.name}" has been pending for ${daysOld} days (threshold: ${STALE_DAYS}). Retiring it clears the Agent Inbox — Drill Scout may re-propose a similar drill if the category is still thin.`,
+        recommendation: "Approve to reject this proposal, or reject this approval to keep it pending for manual review.",
+        action: {
+          key: "proposal.retire_stale",
+          payload: { proposalId: proposal.id, proposalName: proposal.name },
+        },
       }));
     }
   }
@@ -515,7 +549,7 @@ function selectProposalsToSubmit(existingProposals, count = 2) {
   return picks;
 }
 
-async function runDrillScoutAgent(portalData, supabase) {
+function runDrillScoutAgent(portalData) {
   const agent = DEPARTMENT_AGENT_PROFILES[3];
   const today = new Date().toISOString().slice(0, 10);
   const findings = [];
@@ -537,49 +571,44 @@ async function runDrillScoutAgent(portalData, supabase) {
   const approved = proposals.filter((p) => p.status === "approved");
   const rejected = proposals.filter((p) => p.status === "rejected");
 
-  // ── Generate new proposals when pipeline is dry ──────────────────────────
-  // Conditions: fewer than 3 pending AND custom library has room to grow
-  const shouldGenerate = pending.length < 3 && approved.length < 20 && supabase;
-  let generatedCount = 0;
-  const generatedNames = [];
+  // ── Queue new proposals when pipeline is dry ──────────────────────────────
+  // 13H: DrillScout no longer inserts directly. Each selected drill becomes
+  // a finding with an observe-tier `proposal.create` action — the action
+  // executor handles the insert inside the audit loop, keeping all side
+  // effects in one place and audit-visible.
+  const shouldQueue = pending.length < 3 && approved.length < 20;
+  const queuedNames = [];
 
-  if (shouldGenerate) {
+  if (shouldQueue) {
     const picks = selectProposalsToSubmit(proposals, pending.length === 0 ? 3 : 2);
     for (const drill of picks) {
-      const { error } = await supabase.from("agent_proposals").insert({
-        agent: "drill-scout",
-        status: "pending",
-        name: drill.name,
-        category: drill.category,
-        duration: drill.duration,
-        intensity: drill.intensity,
-        players: drill.players,
-        equipment: drill.equipment ?? null,
-        description: drill.description,
-        objectives: drill.objectives,
-        coaching_points: drill.coaching_points,
-        video_url: drill.video_url,
-        agent_notes: drill.agent_notes ?? null,
-        source_url: null,
-      });
-      if (!error) {
-        generatedCount++;
-        generatedNames.push(drill.name);
-      }
+      queuedNames.push(drill.name);
+      findings.push(finding({
+        agent,
+        title: `Queue proposal: ${drill.name}`,
+        severity: "info",
+        category: "pipeline",
+        detail: `Proposing "${drill.name}" (${drill.category}, ${drill.duration}m, ${drill.intensity} intensity). The drill will land in Admin → Agent Inbox as pending for your review.`,
+        recommendation: `${drill.agent_notes ?? "DrillScout selected this to diversify the library."}`,
+        action: {
+          key: "proposal.create",
+          payload: { drill },
+        },
+      }));
     }
   }
 
   // ── Findings ──────────────────────────────────────────────────────────────
 
-  // Pipeline overview (reflects newly generated proposals)
-  const totalPending = pending.length + generatedCount;
+  // Pipeline overview (reflects proposals queued for insertion this run)
+  const totalPending = pending.length + queuedNames.length;
   findings.push(finding({
     agent,
-    title: `Drill pipeline: ${proposals.length + generatedCount} total — ${totalPending} pending, ${approved.length} approved, ${rejected.length} rejected`,
+    title: `Drill pipeline: ${proposals.length + queuedNames.length} total — ${totalPending} pending, ${approved.length} approved, ${rejected.length} rejected`,
     severity: totalPending > 5 ? "low" : "info",
     category: "pipeline",
-    detail: generatedCount > 0
-      ? `Generated ${generatedCount} new proposal${generatedCount !== 1 ? "s" : ""}: ${generatedNames.join(", ")}. Ready for review in Admin → Agent Inbox.`
+    detail: queuedNames.length > 0
+      ? `Queuing ${queuedNames.length} new proposal${queuedNames.length !== 1 ? "s" : ""}: ${queuedNames.join(", ")}. Each will land in Admin → Agent Inbox after this run completes.`
       : totalPending > 0
         ? `Proposals awaiting review: ${pending.map((p) => p.name).join(", ")}.`
         : `No pending proposals. ${approved.length} approved drill${approved.length !== 1 ? "s" : ""} in the custom library.`,
@@ -625,7 +654,7 @@ async function runDrillScoutAgent(portalData, supabase) {
 export async function runDepartmentAgents({ supabase, config }) {
   // Fetch live portal data for all agents in parallel
   const [profiles, players, proposals] = await Promise.all([
-    safeFetch(supabase, "profiles", "id, role, access_expires_on"),
+    safeFetch(supabase, "profiles", "id, name, role, access_expires_on"),
     safeFetch(supabase, "players", "id, name, profile_id"),
     safeFetch(supabase, "agent_proposals", "id, name, status, created_at"),
   ]);
@@ -645,8 +674,9 @@ export async function runDepartmentAgents({ supabase, config }) {
     ...runSecurityAgent(config, portalData),
     ...runCyberAgent(config, portalData),
     ...runQaAgent(config, portalData),
-    // Pass supabase so DrillScout can write proposals
-    ...(await runDrillScoutAgent(portalData, supabase)),
+    // DrillScout is now synchronous — its side effects go through the
+    // action executor via the observe-tier `proposal.create` action.
+    ...runDrillScoutAgent(portalData),
   ];
 
   return {

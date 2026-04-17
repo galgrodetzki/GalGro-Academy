@@ -10,6 +10,7 @@ import {
   APOLLO_FOUNDATION_STEPS,
   APOLLO_PRINCIPLES,
 } from "../data/apollo";
+import ApolloApprovalInbox from "./ApolloApprovalInbox";
 import ApolloChat from "./ApolloChat";
 import ApolloMemory from "./ApolloMemory";
 import ApolloOperationsStatus from "./ApolloOperationsStatus";
@@ -24,6 +25,7 @@ import {
   runApolloHeartbeatDryRun,
   runApolloReadinessCheck,
 } from "../lib/apolloRunner";
+import { useData } from "../context/DataContext";
 
 // ── Style maps ──────────────────────────────────────────────────────────────
 
@@ -274,6 +276,7 @@ export default function ApolloCommandCenter({
   customDrillCount = 0,
   memberCount = 0,
 }) {
+  const { reload: reloadData } = useData();
   const [runnerState, setRunnerState] = useState({ status: "idle", result: null, error: "", checkType: "" });
   const [auditState, setAuditState] = useState({ status: "idle", runs: [], error: "" });
   const [selectedRunId, setSelectedRunId] = useState("");
@@ -321,6 +324,11 @@ export default function ApolloCommandCenter({
       setRunnerState({ status: "success", result, error: "", checkType });
       await loadAuditHistory(result.audit?.runId ?? "");
       await loadSparklines();
+      // Department review can insert new drill-scout proposals — refresh
+      // DataContext so the Agent Inbox picks them up without a page reload.
+      if (checkType === "departments") {
+        await reloadData();
+      }
     } catch (err) {
       setRunnerState({
         status: "error", result: null, checkType,
@@ -390,6 +398,9 @@ export default function ApolloCommandCenter({
 
       {/* ── Operations status ────────────────────────────────────────── */}
       <ApolloOperationsStatus />
+
+      {/* ── Approval inbox ───────────────────────────────────────────── */}
+      <ApolloApprovalInbox onChange={() => loadAuditHistory()} />
 
       {/* ── Departments with sparklines ──────────────────────────────── */}
       <section className="card p-5">
