@@ -154,3 +154,27 @@ Operations Status now shows whether the scheduled cron is actually firing.
 - **13M-3 Weekly digest** — deferred until a week of real 13J usage confirms whether an auto-generated weekly summary is actually wanted.
 
 ### Status: ✅ Cron visibility live
+
+## 13K Record — Cyber Joins the Action Club
+
+Cyber had been pure advisory since 13H. It now has an observe-tier action that actively probes RLS on sensitive tables using an anonymous client — same posture as a logged-out attacker.
+
+### `cyber.rls_audit` — observe tier, category: `housekeeping`
+- Builds a fresh `@supabase/supabase-js` client with the publishable anon key and no auth header.
+- Probes each target table (default: `profiles`, `players`, `sessions`, `agent_proposals`) with `.select("*", { count: "exact", head: true })`. The `head: true` option returns count only — no row data ever hits the executor.
+- Three outcome paths, each updates the source finding in place (no new rows):
+  - **Leaked** (`count > 0`) → finding escalated to `severity: critical`, title rewritten with table list and row counts. Left in `open` status so it shows in the Inbox.
+  - **Open but empty** (`count === 0`, no error) → `severity: medium`. RLS permits anon SELECT; future rows would be public.
+  - **Blocked** (DB error) → auto-resolve the finding to `status: resolved`. Keeps the audit table clean on repeat runs.
+- Always returns `{ ok: true, result: { probes, status, ... } }` so the runner's observe lane logs a success outcome.
+
+### Cyber agent finding
+- New finding in `runCyberAgent`: "RLS baseline audit (anon client)". Starts at `severity: info` with `category: rls_audit`. The action handler mutates it based on what the probe returns.
+- Plays nicely with the daily cron: every run creates a fresh finding. Clean runs auto-resolve, leaks escalate, open-but-empty stays at medium until fixed.
+
+### What 13K did NOT touch
+- No changes to the RLS policies themselves — Cyber only audits, never writes.
+- No new approval flow. Observe tier means auto-execute; no head-coach approval needed because the action is strictly read-only on an anon client.
+- No new table. Results live in the existing `apollo_findings` row via in-place update.
+
+### Status: ✅ Cyber now active, not just advisory

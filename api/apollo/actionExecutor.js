@@ -1,3 +1,5 @@
+import { createClient } from "@supabase/supabase-js";
+
 // Apollo 13G — Action Executor
 //
 // Central dispatcher that turns agent findings into real side effects.
@@ -26,6 +28,16 @@
 // handler returns { ok: boolean, result?: object, error?: string }.
 // Handlers MUST be idempotent where possible and MUST NOT throw — catch
 // internally and return { ok: false, error }.
+
+// 13K: anon client config for cyber.rls_audit. Same fallback chain as the rest
+// of the Apollo server code so a missing env doesn't hard-crash the runner.
+const SUPABASE_URL = process.env.SUPABASE_URL
+  ?? process.env.VITE_SUPABASE_URL
+  ?? "https://gajcrvxyenxjqewuvkgw.supabase.co";
+
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
+  ?? process.env.VITE_SUPABASE_ANON_KEY
+  ?? "sb_publishable_-Sp_uIuA8o1I7nvp-aMxdQ_Y_OLNc1Y";
 
 const FORBIDDEN_CATEGORIES = new Set([
   "secret_exposure",
@@ -208,6 +220,99 @@ registerAction({
       .eq("id", profileId);
     if (error) return { ok: false, error: error.message };
     return { ok: true, result: { profileId, role: targetRole, previousRole } };
+  },
+});
+
+// Cyber · probe RLS on sensitive tables using a fresh anon client.
+//   Tier: observe. Read-only from an unauthenticated client — same posture as
+//   a logged-out attacker. The handler escalates/resolves the source finding
+//   based on what it finds:
+//     - Any table returns rows  → severity: critical, finding left open
+//     - Any table returns 0 rows without error → severity: medium ("open but
+//       empty" — RLS isn't blocking, future inserts would be public)
+//     - All tables blocked by RLS → auto-resolve to keep the audit clean
+//   The original Cyber finding supplies the finding ID via payload.
+registerAction({
+  key: "cyber.rls_audit",
+  label: "Probe RLS on sensitive tables (anon client)",
+  tier: "observe",
+  category: "housekeeping",
+  async handler(payload, ctx) {
+    const { findingId, tables } = payload ?? {};
+    if (!findingId) return { ok: false, error: "cyber.rls_audit needs findingId" };
+
+    const targets = Array.isArray(tables) && tables.length > 0
+      ? tables
+      : ["profiles", "players", "sessions", "agent_proposals"];
+
+    // Fresh anon client: no auth header, no session. Simulates an attacker
+    // hitting the API with only the publishable key.
+    const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const probes = [];
+    for (const table of targets) {
+      // head: true so we don't actually pull rows back — just the count.
+      const { count, error } = await anonClient
+        .from(table)
+        .select("*", { count: "exact", head: true });
+      if (error) {
+        probes.push({ table, status: "blocked", reason: error.message });
+      } else if ((count ?? 0) > 0) {
+        probes.push({ table, status: "LEAKED", rows: count });
+      } else {
+        // Query succeeded with 0 rows — RLS allows SELECT to anon but the
+        // table is empty today. Not a leak yet, but a latent one.
+        probes.push({ table, status: "open_empty", rows: 0 });
+      }
+    }
+
+    const leaked = probes.filter((p) => p.status === "LEAKED");
+    const openEmpty = probes.filter((p) => p.status === "open_empty");
+
+    if (leaked.length > 0) {
+      const summary = leaked.map((l) => `${l.table} (${l.rows})`).join(", ");
+      const { error } = await ctx.supabase
+        .from("apollo_findings")
+        .update({
+          severity: "critical",
+          title: `RLS LEAK: anon can read ${summary}`,
+          finding: `An unauthenticated Supabase client returned rows from: ${summary}. Audit RLS policies immediately.`,
+          recommendation: "Review RLS policies on the leaked tables. Consider rotating the anon key if the leak is recent.",
+        })
+        .eq("id", findingId);
+      if (error) return { ok: false, error: `Probe ran but finding update failed: ${error.message}` };
+      return { ok: true, result: { probes, leakedCount: leaked.length, status: "LEAKED" } };
+    }
+
+    if (openEmpty.length > 0) {
+      const summary = openEmpty.map((o) => o.table).join(", ");
+      const { error } = await ctx.supabase
+        .from("apollo_findings")
+        .update({
+          severity: "medium",
+          title: `RLS allows anon SELECT (empty) on ${summary}`,
+          finding: `Anonymous client can SELECT from ${summary} but those tables are currently empty. Any rows added later would be readable by anyone with the anon key.`,
+          recommendation: "Tighten RLS to deny anonymous SELECT on these tables before inserting rows.",
+        })
+        .eq("id", findingId);
+      if (error) return { ok: false, error: `Probe ran but finding update failed: ${error.message}` };
+      return { ok: true, result: { probes, openEmptyCount: openEmpty.length, status: "open_empty" } };
+    }
+
+    // All tables properly block anon. Auto-resolve so the audit trail stays
+    // clean on repeat runs — only real regressions surface as open findings.
+    const { error } = await ctx.supabase
+      .from("apollo_findings")
+      .update({
+        status: "resolved",
+        severity: "info",
+        finding: `Anonymous client was blocked on all ${probes.length} probed tables: ${probes.map((p) => p.table).join(", ")}.`,
+      })
+      .eq("id", findingId);
+    if (error) return { ok: false, error: `Probe ran but finding update failed: ${error.message}` };
+    return { ok: true, result: { probes, leakedCount: 0, status: "clean" } };
   },
 });
 

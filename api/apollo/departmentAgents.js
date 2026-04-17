@@ -227,6 +227,26 @@ function runCyberAgent(config, portalData) {
       : "Add CRON_SECRET before enabling any scheduled heartbeat.",
   }));
 
+  // 13K: Cyber's first action. Observe-tier probe of sensitive tables using an
+  // unauthenticated client. The action handler updates this finding in place:
+  //   leaked → critical + open     (visible in Inbox as an incident)
+  //   open_empty → medium + open   (RLS is too loose even though empty today)
+  //   all blocked → auto-resolved  (audit trail stays clean on repeat runs)
+  // The initial finding lands as "info" because we don't know the state until
+  // the probe runs. The runner's observe lane executes it immediately.
+  findings.push(finding({
+    agent,
+    title: "RLS baseline audit (anon client)",
+    severity: "info",
+    category: "rls_audit",
+    detail: "Apollo will probe key tables with an anonymous Supabase client and update this finding based on what comes back.",
+    recommendation: "If this finding escalates to critical, review RLS policies on the listed tables immediately.",
+    action: {
+      key: "cyber.rls_audit",
+      payload: { tables: ["profiles", "players", "sessions", "agent_proposals"] },
+    },
+  }));
+
   return findings;
 }
 
