@@ -480,7 +480,35 @@ async function processFindingActions(findings, ctx) {
       continue;
     }
 
-    // recommend or approval_required → create an approval row
+    // recommend or approval_required → create an approval row.
+    //
+    // Dedup guard: the daily cron re-runs department review every 09:00 UTC.
+    // Without this check, an unactioned Security access.revoke for profile X
+    // would emit a NEW approval row every day and fill the inbox with dupes.
+    // We skip if there's already a pending approval with the same action_key
+    // and a payload that matches this run's target identifiers. Payload
+    // matching uses JSONB containment against the ORIGINAL payload (sans
+    // findingId, which differs every run) — the stored row is still a
+    // superset because JSONB contains the findingId key too.
+    const originalPayload = finding.metadata?.actionPayload ?? {};
+    const { data: existingPending, error: dupCheckError } = await ctx.supabase
+      .from("apollo_approvals")
+      .select("id")
+      .eq("status", "pending")
+      .eq("action_key", actionKey)
+      .contains("action_payload", originalPayload)
+      .limit(1);
+
+    if (dupCheckError) {
+      // Fail open: if the dedup query errors, create the row anyway rather
+      // than silently dropping a legit approval. A duplicate is recoverable;
+      // a missing approval isn't.
+      console.warn("Apollo dedup check failed, proceeding", dupCheckError.message);
+    } else if (existingPending && existingPending.length > 0) {
+      outcomes.skipped += 1;
+      continue;
+    }
+
     const { error: approvalError } = await ctx.supabase
       .from("apollo_approvals")
       .insert({
