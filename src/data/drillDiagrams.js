@@ -1287,3 +1287,163 @@ export const DRILL_DIAGRAMS = {
 export function hasDiagram(drillId) {
   return Object.prototype.hasOwnProperty.call(DRILL_DIAGRAMS, drillId);
 }
+
+/**
+ * getCategoryFallbackDiagram — generic pitch setup for custom drills.
+ * Used when a drill has a UUID id (custom/DrillScout-approved) with no
+ * hand-built entry in DRILL_DIAGRAMS. Shows a representative setup for
+ * the category so the modal isn't empty.
+ */
+export function getCategoryFallbackDiagram(category) {
+  const cat = (category ?? "").toLowerCase().replace(/[\s_]/g, "-");
+
+  const fallbacks = {
+    "shot-stopping": {
+      elements: [
+        { type: "keeper", x: 100, y: 25, label: "GK" },
+        { type: "player", x: 100, y: 70, label: "C", role: "coach" },
+        { type: "ball",   x: 100, y: 67 },
+        { type: "arrow",  from: [100, 70], to: [95, 20], kind: "shot" },
+        { type: "arrow",  from: [100, 70], to: [115, 22], kind: "shot" },
+        { type: "label",  x: 100, y: 125, text: "Custom drill · see description" },
+      ],
+    },
+    "diving": {
+      elements: [
+        { type: "keeper", x: 100, y: 28, label: "GK" },
+        { type: "player", x: 100, y: 55, label: "C", role: "coach" },
+        { type: "ball",   x: 100, y: 52 },
+        { type: "arrow",  from: [100, 55], to: [72, 30], kind: "pass" },
+        { type: "arrow",  from: [100, 55], to: [128, 30], kind: "pass" },
+        { type: "label",  x: 100, y: 125, text: "Custom drill · see description" },
+      ],
+    },
+    "reflexes": {
+      elements: [
+        { type: "keeper", x: 100, y: 28, label: "GK" },
+        { type: "player", x: 75, y: 50, label: "1", role: "coach" },
+        { type: "player", x: 100, y: 55, label: "2", role: "coach" },
+        { type: "player", x: 125, y: 50, label: "3", role: "coach" },
+        { type: "arrow",  from: [75, 50], to: [90, 22], kind: "shot" },
+        { type: "arrow",  from: [125, 50], to: [110, 22], kind: "shot" },
+        { type: "label",  x: 100, y: 125, text: "Custom drill · see description" },
+      ],
+    },
+    "footwork": {
+      elements: [
+        { type: "cone",  x: 65, y: 35 },
+        { type: "cone",  x: 100, y: 35 },
+        { type: "cone",  x: 135, y: 35 },
+        { type: "keeper", x: 65, y: 35, label: "GK" },
+        { type: "arrow", from: [65, 35], to: [135, 35], kind: "move" },
+        { type: "label", x: 100, y: 60, text: "Custom drill · see description" },
+      ],
+    },
+    "positioning": {
+      elements: [
+        { type: "keeper", x: 100, y: 28, label: "GK" },
+        { type: "player", x: 55, y: 65, label: "C", role: "coach" },
+        { type: "player", x: 145, y: 65, label: "C", role: "coach" },
+        { type: "arrow",  from: [55, 65], to: [82, 20], kind: "shot" },
+        { type: "arrow",  from: [145, 65], to: [118, 20], kind: "shot" },
+        { type: "label",  x: 100, y: 125, text: "Custom drill · see description" },
+      ],
+    },
+    "distribution": {
+      elements: [
+        { type: "keeper", x: 100, y: 32, label: "GK" },
+        { type: "ball",   x: 100, y: 35 },
+        { type: "cone",   x: 50, y: 120 },
+        { type: "cone",   x: 150, y: 120 },
+        { type: "arrow",  from: [100, 35], to: [55, 117], kind: "pass" },
+        { type: "arrow",  from: [100, 35], to: [145, 117], kind: "pass" },
+        { type: "label",  x: 100, y: 140, text: "Custom drill · see description" },
+      ],
+    },
+    "crosses": {
+      elements: [
+        { type: "player", x: 22, y: 70, label: "C", role: "coach" },
+        { type: "ball",   x: 22, y: 72 },
+        { type: "keeper", x: 100, y: 25, label: "GK" },
+        { type: "arrow",  from: [22, 70], to: [105, 28], kind: "cross" },
+        { type: "label",  x: 100, y: 125, text: "Custom drill · see description" },
+      ],
+    },
+    "1v1": {
+      elements: [
+        { type: "player", x: 100, y: 105, label: "S", role: "striker" },
+        { type: "ball",   x: 100, y: 102 },
+        { type: "arrow",  from: [100, 105], to: [100, 70], kind: "move" },
+        { type: "keeper", x: 100, y: 25, label: "GK" },
+        { type: "arrow",  from: [100, 25], to: [100, 50], kind: "move" },
+        { type: "label",  x: 100, y: 130, text: "Custom drill · see description" },
+      ],
+    },
+    "1v1-situations": {
+      elements: [
+        { type: "player", x: 100, y: 105, label: "S", role: "striker" },
+        { type: "ball",   x: 100, y: 102 },
+        { type: "arrow",  from: [100, 105], to: [100, 70], kind: "move" },
+        { type: "keeper", x: 100, y: 25, label: "GK" },
+        { type: "arrow",  from: [100, 25], to: [100, 50], kind: "move" },
+        { type: "label",  x: 100, y: 130, text: "Custom drill · see description" },
+      ],
+    },
+    "set-pieces": {
+      elements: [
+        { type: "ball",   x: 100, y: 70 },
+        { type: "player", x: 100, y: 88, label: "S", role: "striker" },
+        { type: "keeper", x: 100, y: 22, label: "GK" },
+        { type: "arrow",  from: [100, 70], to: [80, 18], kind: "shot" },
+        { type: "arrow",  from: [100, 70], to: [120, 18], kind: "shot" },
+        { type: "label",  x: 100, y: 130, text: "Custom drill · see description" },
+      ],
+    },
+    "set-pieces-and-penalties": {
+      elements: [
+        { type: "ball",   x: 100, y: 70 },
+        { type: "player", x: 100, y: 88, label: "S", role: "striker" },
+        { type: "keeper", x: 100, y: 22, label: "GK" },
+        { type: "arrow",  from: [100, 70], to: [80, 18], kind: "shot" },
+        { type: "arrow",  from: [100, 70], to: [120, 18], kind: "shot" },
+        { type: "label",  x: 100, y: 130, text: "Custom drill · see description" },
+      ],
+    },
+    "communication": {
+      elements: [
+        { type: "keeper", x: 100, y: 25, label: "GK" },
+        { type: "player", x: 55, y: 55, label: "D", role: "coach" },
+        { type: "player", x: 145, y: 55, label: "D", role: "coach" },
+        { type: "player", x: 100, y: 90, label: "S", role: "striker" },
+        { type: "ball",   x: 100, y: 87 },
+        { type: "label",  x: 100, y: 125, text: "Custom drill · see description" },
+      ],
+    },
+    "physical": {
+      elements: [
+        { type: "cone",  x: 65, y: 45 },
+        { type: "cone",  x: 100, y: 45 },
+        { type: "cone",  x: 135, y: 45 },
+        { type: "keeper", x: 100, y: 45, label: "GK" },
+        { type: "arrow", from: [65, 45], to: [135, 45], kind: "move" },
+        { type: "label", x: 100, y: 75, text: "Custom drill · see description" },
+      ],
+    },
+    "mental": {
+      elements: [
+        { type: "keeper", x: 100, y: 25, label: "GK" },
+        { type: "label",  x: 100, y: 70, text: "Mental & decision making" },
+        { type: "label",  x: 100, y: 85, text: "See description for setup" },
+      ],
+    },
+    "recovery": {
+      elements: [
+        { type: "keeper", x: 100, y: 40, label: "GK" },
+        { type: "label",  x: 100, y: 70, text: "Warm-up / Recovery" },
+        { type: "label",  x: 100, y: 85, text: "See description for setup" },
+      ],
+    },
+  };
+
+  return fallbacks[cat] ?? fallbacks["shot-stopping"];
+}

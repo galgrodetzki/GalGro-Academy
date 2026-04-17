@@ -62,19 +62,23 @@ const fromPlayer = (p) => {
 
 // Maps a custom_drills row to the same shape as static DRILLS array entries
 const toCustomDrill = (row) => ({
-  id:        row.id,
-  cat:       row.category,
-  name:      row.name,
-  dur:       row.duration,
-  int:       row.intensity,
-  desc:      row.description,
-  eq:        row.equipment ? row.equipment.split(",").map((s) => s.trim()).filter(Boolean) : [],
-  cp:        Array.isArray(row.coaching_points)
-               ? row.coaching_points.join(" ")
-               : (row.coaching_points ?? ""),
-  reps:      row.players ?? "",
-  custom:    true,
-  sourceUrl: row.source_url ?? null,
+  id:         row.id,
+  cat:        row.category,
+  name:       row.name,
+  dur:        row.duration,
+  int:        row.intensity,
+  desc:       row.description,
+  eq:         row.equipment ? row.equipment.split(",").map((s) => s.trim()).filter(Boolean) : [],
+  cp:         Array.isArray(row.coaching_points)
+                ? row.coaching_points.join(" ")
+                : (row.coaching_points ?? ""),
+  prog:       Array.isArray(row.objectives)
+                ? row.objectives.join(" · ")
+                : (row.objectives ?? ""),
+  reps:       row.players ?? "",
+  custom:     true,
+  video:      row.video_url ?? null,   // surfaces YouTube button in DrillLibrary modal
+  sourceUrl:  row.source_url ?? null,
   proposalId: row.proposal_id ?? null,
 });
 
@@ -265,6 +269,7 @@ export function DataProvider({ children }) {
       objectives:      proposal.objectives,
       coaching_points: proposal.coaching_points,
       source_url:      proposal.source_url,
+      video_url:       proposal.video_url ?? null,   // carry through from proposal
     };
     const { data: drillData, error: drillErr } = await supabase
       .from("custom_drills")

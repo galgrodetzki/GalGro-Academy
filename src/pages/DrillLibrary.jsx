@@ -5,7 +5,7 @@ import PageHeader from "../components/PageHeader";
 import CategoryIcon from "../components/CategoryIcon";
 import EmptyState from "../components/ui/EmptyState";
 import DrillDiagram from "../components/ui/DrillDiagram";
-import { DRILL_DIAGRAMS } from "../data/drillDiagrams";
+import { DRILL_DIAGRAMS, getCategoryFallbackDiagram } from "../data/drillDiagrams";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useScrollLock } from "../hooks/useScrollLock";
 import { useData } from "../context/DataContext";
@@ -151,8 +151,11 @@ export default function DrillLibrary() {
                       <Package size={11} /> {d.eq.length}
                     </span>
                   )}
-                  {DRILL_DIAGRAMS[d.id] && (
-                    <span className="flex items-center gap-1 text-info" title="Has setup diagram">
+                  {(DRILL_DIAGRAMS[d.id] || d.custom) && (
+                    <span
+                      className={`flex items-center gap-1 ${DRILL_DIAGRAMS[d.id] ? "text-info" : "text-white/30"}`}
+                      title={DRILL_DIAGRAMS[d.id] ? "Has setup diagram" : "Category diagram"}
+                    >
                       <Map size={11} />
                     </span>
                   )}
@@ -219,12 +222,23 @@ export default function DrillLibrary() {
               </a>
             )}
 
-            {DRILL_DIAGRAMS[selected.id] && (
-              <div className="mb-5">
-                <div className="label">Setup</div>
-                <DrillDiagram diagram={DRILL_DIAGRAMS[selected.id]} />
-              </div>
-            )}
+            {(() => {
+              const diagram = DRILL_DIAGRAMS[selected.id]
+                ?? (selected.custom ? getCategoryFallbackDiagram(selected.cat) : null);
+              return diagram ? (
+                <div className="mb-5">
+                  <div className="label flex items-center gap-2">
+                    Setup
+                    {selected.custom && !DRILL_DIAGRAMS[selected.id] && (
+                      <span className="text-[10px] font-normal normal-case text-white/35 tracking-normal">
+                        · generic layout for this category
+                      </span>
+                    )}
+                  </div>
+                  <DrillDiagram diagram={diagram} />
+                </div>
+              ) : null;
+            })()}
 
             <Section title="Description">{selected.desc}</Section>
             <Section title="Coaching Points">{selected.cp}</Section>

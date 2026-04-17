@@ -290,7 +290,232 @@ function runQaAgent(config, portalData) {
   return findings;
 }
 
-function runDrillScoutAgent(portalData) {
+// ── Drill Scout proposal catalog ──────────────────────────────────────────
+// Hand-curated GK drills. DrillScout rotates through these, picking from
+// categories under-represented in the custom library. Every entry includes
+// a video_url so approved drills surface the YouTube button immediately.
+
+const DRILL_SCOUT_CATALOG = [
+  {
+    name: "Back-to-Goal Reaction Save",
+    category: "reflexes",
+    duration: 12,
+    intensity: "High",
+    players: "1 keeper · 1 server",
+    equipment: "Balls, GK Gloves",
+    description: "Keeper faces away from goal. Server calls 'turn' and fires a shot immediately. Keeper spins and saves. Focus on quick pivot and hand position as you turn.",
+    objectives: ["Train turn-and-save reflex", "Improve reaction to unexpected shots", "Build scanning habit"],
+    coaching_points: ["Spin on the balls of your feet — don't cross your legs", "Hands up before you've fully turned", "Eyes on the ball the moment you rotate"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+back+to+goal+reaction+save+drill",
+    agent_notes: "High-value reflex drill. Simulates a deflection or rebound where keeper has lost sightline.",
+  },
+  {
+    name: "Keeper vs Keeper Shootout",
+    category: "shot-stopping",
+    duration: 15,
+    intensity: "High",
+    players: "2 keepers",
+    equipment: "Balls, GK Gloves, 2 mini goals",
+    description: "Two keepers face each other with mini goals 12 yards apart. Take turns shooting from where you stand — no dribbling. First to 5 wins. Loser does 10 press-ups.",
+    objectives: ["Competitive shot-stopping under pressure", "Shooting accuracy for keepers", "Game-speed reactions"],
+    coaching_points: ["Pick your corner — aim before you kick", "Stay on your feet until the last moment", "Reset quickly after each save"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+vs+goalkeeper+shootout+training+drill",
+    agent_notes: "Competitive format increases intensity and sharpens decision-making under pressure.",
+  },
+  {
+    name: "Diving Header Claim",
+    category: "crosses",
+    duration: 10,
+    intensity: "High",
+    players: "1 keeper · 1 server",
+    equipment: "Balls, GK Gloves",
+    description: "Server delivers a dropping ball from the side. Keeper comes off the line and claims it at the highest point with a diving header technique — but catches it, doesn't head it. All about timing the run.",
+    objectives: ["Time the run to meet a dropping cross", "Attack the ball at the highest point", "Maintain strong body shape mid-air"],
+    coaching_points: ["Commit to the cross early — don't hesitate", "Lead with your hands, not your head", "Call 'keeper!' before you leave your line"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+diving+cross+claim+timing+drill",
+    agent_notes: "Targets the gap between crosses and corners — ball that drops behind the initial line.",
+  },
+  {
+    name: "Low Driven Cross + Striker Deflection",
+    category: "crosses",
+    duration: 12,
+    intensity: "High",
+    players: "1 keeper · 1 server · 1 coach acting as striker",
+    equipment: "Balls, GK Gloves, Cones",
+    description: "Server drives a low cross along the ground from wide. A second player at the near post deflects or misses it. Keeper must react to the deflection and stop the ball reaching the far post.",
+    objectives: ["React to low driven crosses", "Read deflection paths", "Protect the far post"],
+    coaching_points: ["Stay off your line for low crosses — be ready to move", "Watch the ball through the deflecting player", "Push off early if it clears the near post"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+low+cross+near+post+deflection+save",
+    agent_notes: "One of the most common goal sources. The near-post deflection is frequently unaddressed in training.",
+  },
+  {
+    name: "Distribution Under Pressure",
+    category: "distribution",
+    duration: 12,
+    intensity: "Medium",
+    players: "1 keeper · 2 servers",
+    equipment: "Balls, GK Gloves, Cones",
+    description: "Two servers close in from midfield after keeper makes a save. Keeper has 3 seconds to distribute to a target cone 30+ yards away before servers arrive. Simulate match pressure on the ball.",
+    objectives: ["Distribute quickly under time pressure", "Choose the right distribution type", "Scan before receiving the ball back"],
+    coaching_points: ["Decide before the ball reaches you", "Pick your head up the moment you catch it", "Drop-kick, throw, or kick — don't take extra touches"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+distribution+under+pressure+quick+release",
+    agent_notes: "Bridges shot-stopping and distribution. Forces decision-making at game speed.",
+  },
+  {
+    name: "Chip Shot Recovery",
+    category: "positioning",
+    duration: 10,
+    intensity: "High",
+    players: "1 keeper · 1 server",
+    equipment: "Balls, GK Gloves",
+    description: "Keeper is positioned at edge of box (acting as sweeper-keeper). Server chips from 25 yards. Keeper must read the flight, sprint back, and either catch or tip over the crossbar.",
+    objectives: ["Read early chip shot flight", "Sprint recovery to goal line", "Tip over or catch at full stretch"],
+    coaching_points: ["Open body shape when high — read the flight immediately", "Don't backpedal — turn and sprint", "Hands up early as you arrive"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+chip+shot+recovery+sprint+tip+over+bar",
+    agent_notes: "Essential for any keeper who plays a high defensive line.",
+  },
+  {
+    name: "Short-Corner Set Play",
+    category: "set-pieces",
+    duration: 12,
+    intensity: "Medium",
+    players: "1 keeper · 2 servers",
+    equipment: "Balls, GK Gloves, Cones",
+    description: "Corner is played short to a teammate who lays it back for a late-arriving shot from the D. Keeper must reset position from corner stance to face a driven shot from 20 yards.",
+    objectives: ["Recognise and react to short corner play", "Reset body position mid-sequence", "Deal with driven shot after reposition"],
+    coaching_points: ["Watch the corner-taker, not just the ball in the box", "Move early when short — don't freeze", "Get set before the shot comes"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+short+corner+set+play+drill",
+    agent_notes: "Short corners catch keepers off-guard. Practice the positional reset under time pressure.",
+  },
+  {
+    name: "One-Handed Extension Save",
+    category: "diving",
+    duration: 10,
+    intensity: "High",
+    players: "1 keeper · 1 server",
+    equipment: "Balls, GK Gloves",
+    description: "Server fires balls at full stretch pace — just out of two-handed reach. Keeper must extend one arm fully and tip or parry to safety. Done from both sides.",
+    objectives: ["Develop one-handed save technique", "Improve full-body extension", "Parry to safety, not back to danger"],
+    coaching_points: ["Lead with the outside hand — don't reach across your body", "Push the ball wide, not central", "Landing: side, then hip, then roll"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+one+handed+extension+tip+save+drill",
+    agent_notes: "The last line of defence when two hands won't reach. Critical for top-corner saves.",
+  },
+  {
+    name: "Communication: Press Trigger Call",
+    category: "communication",
+    duration: 10,
+    intensity: "Medium",
+    players: "1 keeper · 4 outfield players (use cones if needed)",
+    equipment: "Balls, Cones",
+    description: "Coach plays into a target player. Keeper decides when to call 'press' based on the quality of the touch. Defenders react to keeper's call. Focus on timing and clarity of the trigger call.",
+    objectives: ["Learn when to trigger a press", "Develop commanding, clear vocal cues", "Coordinate the press with defenders"],
+    coaching_points: ["Call 'press' only when the touch is heavy or the player turns away", "Be loud — make it unmistakable", "If in doubt, hold the line"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+press+trigger+communication+training",
+    agent_notes: "The press-trigger call is one of the most impactful things a keeper does without touching the ball.",
+  },
+  {
+    name: "Collapse + Immediate Recovery",
+    category: "diving",
+    duration: 12,
+    intensity: "High",
+    players: "1 keeper · 1 server",
+    equipment: "Balls, GK Gloves",
+    description: "Server fires low to one side. Keeper collapses to save. Immediately rolls to feet and faces a second shot to the other side within 2 seconds. No break between the save and the follow-up.",
+    objectives: ["Fast recovery from ground after save", "Maintain focus and body position after effort", "Two consecutive saves without reset time"],
+    coaching_points: ["Don't stay on the ground — roll to feet immediately", "Eyes stay on the server through the roll", "Don't relax after the first save"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+collapse+dive+immediate+recovery+second+save",
+    agent_notes: "Rebound saves are a major goal source. Recovery speed after the first save is the skill.",
+  },
+  {
+    name: "Penalty Saving Strategy Session",
+    category: "set-pieces",
+    duration: 15,
+    intensity: "Medium",
+    players: "1 keeper · multiple penalty takers",
+    equipment: "Balls, GK Gloves",
+    description: "Systematic penalty-saving practice. Keeper picks a side before each run-up and commits. Then tries to read the taker's body shape and stance. Alternate between committed dive and reactive save.",
+    objectives: ["Build a penalty-saving strategy", "Read the taker's body shape and standing foot", "Commit to a decision without hesitation"],
+    coaching_points: ["Pick a side on hard kicks — you won't react in time", "Look at the standing foot and hip angle, not the eyes", "Once committed, don't change"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+penalty+saving+strategy+read+taker",
+    agent_notes: "Most penalty drills are mechanical. This one focuses on the decision-making process.",
+  },
+  {
+    name: "High-Ball Footwork Circuit",
+    category: "footwork",
+    duration: 10,
+    intensity: "Medium",
+    players: "1 keeper · 1 server",
+    equipment: "Balls, GK Gloves, Agility Ladder",
+    description: "Keeper completes a 5-cone ladder pattern, then immediately turns to claim a high ball delivered by the server. No pause between the footwork and the claim. Forces coordination under movement.",
+    objectives: ["Combine footwork with ball claim", "Maintain handling quality after physical effort", "Transition quickly from movement to set position"],
+    coaching_points: ["Complete the ladder clean — don't rush it", "Turn with purpose, not panic", "Hands up before the ball arrives"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+footwork+ladder+to+high+ball+claim+drill",
+    agent_notes: "Bridges the gap between footwork drills and live ball work. Game-realistic.",
+  },
+  {
+    name: "Six-Yard Box Scramble",
+    category: "shot-stopping",
+    duration: 10,
+    intensity: "High",
+    players: "1 keeper · 2 servers",
+    equipment: "Balls, GK Gloves",
+    description: "Two servers stand either side of the 6-yard box. They alternate firing low shots from close range. Keeper cannot set — they must save from whatever position they're in after the previous shot.",
+    objectives: ["Handle multiple close-range threats", "Save without full body position", "Keep the ball out when off-balance"],
+    coaching_points: ["Don't wait to be set — react from where you are", "Instinct saves: arms, legs, whatever blocks the ball", "Be loud — make yourself big"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+six+yard+box+scramble+close+range+drill",
+    agent_notes: "Replicates the chaos of a goalmouth scramble. Very few GKs train this specifically.",
+  },
+  {
+    name: "Footwork and Shot Angles Combo",
+    category: "positioning",
+    duration: 12,
+    intensity: "Medium",
+    players: "1 keeper · 1 server",
+    equipment: "Balls, GK Gloves, Cones",
+    description: "Cones mark four shooting positions around the box. Server passes to each in sequence. Keeper must re-angle before each shot, setting position from the correct spot for each cone location.",
+    objectives: ["Re-angle efficiently between shooting positions", "Maintain correct set stance at each position", "Handle driven shots immediately after moving"],
+    coaching_points: ["Shuffle — don't sprint — between positions", "Set before the ball leaves the server's foot", "Always face the ball, not the cone"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+positioning+footwork+angle+drill+cones",
+    agent_notes: "A great bridge between isolated footwork and live positioning work.",
+  },
+  {
+    name: "Full Stretch Aerial Tip",
+    category: "shot-stopping",
+    duration: 10,
+    intensity: "High",
+    players: "1 keeper · 1 server",
+    equipment: "Balls, GK Gloves",
+    description: "Server stands 10 yards out and delivers balls to the top corners — curling shots, not flat. Keeper must tip the ball over the bar or around the post. Focus on getting full extension with one hand.",
+    objectives: ["Tip top-corner shots to safety", "Full-body extension with clean hand contact", "Make good decisions: tip over or wide?"],
+    coaching_points: ["Open the palm — don't claw at it", "Tip over the bar if going straight — tip around the post if going wide", "Stay on your feet as long as possible"],
+    video_url: "https://www.youtube.com/results?search_query=goalkeeper+top+corner+tip+over+bar+extension+save",
+    agent_notes: "Top-corner tip-overs are aesthetically strong and technically demanding. Worth repeating often.",
+  },
+];
+
+// Pick drills to propose: rotate by date so each daily run proposes different ones,
+// and skip any that are already pending or already match an existing proposal name.
+function selectProposalsToSubmit(existingProposals, count = 2) {
+  const existingNames = new Set(existingProposals.map((p) => p.name.toLowerCase()));
+  const available = DRILL_SCOUT_CATALOG.filter(
+    (d) => !existingNames.has(d.name.toLowerCase())
+  );
+  if (available.length === 0) return [];
+
+  // Deterministic daily rotation: use ISO date as seed offset
+  const dayOfYear = Math.floor(
+    (Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000
+  );
+  const startIdx = (dayOfYear * 3) % available.length;
+
+  const picks = [];
+  for (let i = 0; i < available.length && picks.length < count; i++) {
+    picks.push(available[(startIdx + i) % available.length]);
+  }
+  return picks;
+}
+
+async function runDrillScoutAgent(portalData, supabase) {
   const agent = DEPARTMENT_AGENT_PROFILES[3];
   const today = new Date().toISOString().slice(0, 10);
   const findings = [];
@@ -308,24 +533,59 @@ function runDrillScoutAgent(portalData) {
     return findings;
   }
 
-  const pending = proposals.filter((p) => p.status === "pending");
+  const pending  = proposals.filter((p) => p.status === "pending");
   const approved = proposals.filter((p) => p.status === "approved");
   const rejected = proposals.filter((p) => p.status === "rejected");
 
-  // Pipeline overview
+  // ── Generate new proposals when pipeline is dry ──────────────────────────
+  // Conditions: fewer than 3 pending AND custom library has room to grow
+  const shouldGenerate = pending.length < 3 && approved.length < 20 && supabase;
+  let generatedCount = 0;
+  const generatedNames = [];
+
+  if (shouldGenerate) {
+    const picks = selectProposalsToSubmit(proposals, pending.length === 0 ? 3 : 2);
+    for (const drill of picks) {
+      const { error } = await supabase.from("agent_proposals").insert({
+        agent: "drill-scout",
+        status: "pending",
+        name: drill.name,
+        category: drill.category,
+        duration: drill.duration,
+        intensity: drill.intensity,
+        players: drill.players,
+        equipment: drill.equipment ?? null,
+        description: drill.description,
+        objectives: drill.objectives,
+        coaching_points: drill.coaching_points,
+        video_url: drill.video_url,
+        agent_notes: drill.agent_notes ?? null,
+        source_url: null,
+      });
+      if (!error) {
+        generatedCount++;
+        generatedNames.push(drill.name);
+      }
+    }
+  }
+
+  // ── Findings ──────────────────────────────────────────────────────────────
+
+  // Pipeline overview (reflects newly generated proposals)
+  const totalPending = pending.length + generatedCount;
   findings.push(finding({
     agent,
-    title: `Drill pipeline: ${proposals.length} total — ${pending.length} pending, ${approved.length} approved, ${rejected.length} rejected`,
-    severity: pending.length > 3 ? "low" : "info",
+    title: `Drill pipeline: ${proposals.length + generatedCount} total — ${totalPending} pending, ${approved.length} approved, ${rejected.length} rejected`,
+    severity: totalPending > 5 ? "low" : "info",
     category: "pipeline",
-    detail: pending.length > 0
-      ? `Proposals awaiting review: ${pending.map((p) => p.name).join(", ")}.`
-      : `No pending proposals. ${approved.length} approved drill${approved.length !== 1 ? "s" : ""} in the custom library.`,
-    recommendation: pending.length > 0
-      ? "Review pending proposals in Admin → Agent Inbox."
-      : approved.length < 5
-        ? "Consider generating more drill proposals to expand the custom library."
-        : "Drill library is well-stocked. Focus on using drills in sessions and noting what works.",
+    detail: generatedCount > 0
+      ? `Generated ${generatedCount} new proposal${generatedCount !== 1 ? "s" : ""}: ${generatedNames.join(", ")}. Ready for review in Admin → Agent Inbox.`
+      : totalPending > 0
+        ? `Proposals awaiting review: ${pending.map((p) => p.name).join(", ")}.`
+        : `No pending proposals. ${approved.length} approved drill${approved.length !== 1 ? "s" : ""} in the custom library.`,
+    recommendation: totalPending > 0
+      ? "Review pending proposals in Admin → Agent Inbox. Each drill includes a YouTube link and is ready to approve."
+      : "Drill library is well-stocked. Focus on using drills in sessions.",
   }));
 
   // Age of oldest pending proposal
@@ -385,7 +645,8 @@ export async function runDepartmentAgents({ supabase, config }) {
     ...runSecurityAgent(config, portalData),
     ...runCyberAgent(config, portalData),
     ...runQaAgent(config, portalData),
-    ...runDrillScoutAgent(portalData),
+    // Pass supabase so DrillScout can write proposals
+    ...(await runDrillScoutAgent(portalData, supabase)),
   ];
 
   return {
