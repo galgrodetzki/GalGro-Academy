@@ -139,3 +139,18 @@ Three-part cleanup so the action system feels finished: every approval now has a
 - execution_result now shapes the audit trail: every completed row says what actually changed.
 
 ### Status: ✅ Lifecycle polish shipped
+
+## 13M-2 Record — Cron Visibility
+
+Operations Status now shows whether the scheduled cron is actually firing.
+
+- `api/apollo/status.js` — `fetchLastScheduledRun` queries the latest `apollo_agent_runs` row where `agent_key = 'apollo'` AND `run_type = 'scheduled'`, returns `{ lastRunAt, status, summary, runId }`. Runs in parallel with the context-pack build via `Promise.all`.
+- Response shape extended: `heartbeat.lastScheduledRun` now carries the result. Fail-open: DB error surfaces as `error` but doesn't break the overall status response.
+- `src/components/ApolloOperationsStatus.jsx` — new "Last cron run" section under the Heartbeat cell. Shows relative time ("3h ago" / "2d ago") + absolute timestamp + run status. Green if within 26h (normal daily cron with drift), warn otherwise. "never" when no scheduled row exists yet.
+- No schema change. No new secrets. Reads via the existing head-coach session client (RLS already grants select on `apollo_agent_runs` to head_coach).
+
+### What 13M still owes (deferred)
+- **13M-1 Token/cost counter** — deferred until model-backed chat is actually in use in production. Premature to track tokens we're not spending.
+- **13M-3 Weekly digest** — deferred until a week of real 13J usage confirms whether an auto-generated weekly summary is actually wanted.
+
+### Status: ✅ Cron visibility live

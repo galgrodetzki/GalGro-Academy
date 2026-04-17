@@ -91,11 +91,44 @@ async function authorizeHeadCoach(request) {
   };
 }
 
+// 13M-2: last-cron-run visibility. Reads the most recent apollo_agent_runs
+// row tagged run_type='scheduled' so Operations Status can show when the cron
+// last fired. A null lastRunAt is meaningful — it means either the cron isn't
+// configured yet or it hasn't fired since the table was created.
+async function fetchLastScheduledRun(supabaseClient) {
+  const { data, error } = await supabaseClient
+    .from("apollo_agent_runs")
+    .select("id,status,summary,completed_at,created_at,run_type")
+    .eq("agent_key", "apollo")
+    .eq("run_type", "scheduled")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    // Fail open: surface as "unknown" rather than blowing up the whole status.
+    return { lastRunAt: null, status: null, summary: null, runId: null, error: error.message };
+  }
+  if (!data) {
+    return { lastRunAt: null, status: null, summary: null, runId: null, error: null };
+  }
+  return {
+    lastRunAt: data.completed_at ?? data.created_at,
+    status: data.status,
+    summary: data.summary,
+    runId: data.id,
+    error: null,
+  };
+}
+
 async function handleStatus(request) {
   const auth = await authorizeHeadCoach(request);
   if (!auth.ok) return json({ error: auth.error }, auth.status);
 
-  const context = await buildApolloContextPacks({ supabase: auth.supabase, actor: auth.actor });
+  const [context, lastScheduled] = await Promise.all([
+    buildApolloContextPacks({ supabase: auth.supabase, actor: auth.actor }),
+    fetchLastScheduledRun(auth.supabase),
+  ]);
   const modelConfigured = MODEL_AUTH_MODE !== "locked";
   const heartbeatArmed = HEARTBEAT_ENABLED && Boolean(RUNNER_SECRET) && Boolean(SERVICE_ROLE_KEY);
 
@@ -119,6 +152,9 @@ async function handleStatus(request) {
       message: heartbeatArmed
         ? "Scheduled heartbeat has the required server gates."
         : "Heartbeat remains manual/dry-run only until APOLLO_HEARTBEAT_ENABLED, runner secret, and service-role key are all configured.",
+      // 13M-2: surface the latest scheduled run under the heartbeat payload so
+      // the UI can show "last cron run: <timestamp>" without a second round trip.
+      lastScheduledRun: lastScheduled,
     },
     context: {
       version: context.version,

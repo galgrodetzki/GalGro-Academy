@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Activity, BrainCircuit, RadioTower, RefreshCw, ShieldCheck } from "lucide-react";
+import { Activity, BrainCircuit, RadioTower, RefreshCw, ShieldCheck, Clock } from "lucide-react";
 import { motion as Motion } from "framer-motion";
 import { fetchApolloStatus } from "../lib/apolloStatus";
 import Skeleton from "./ui/Skeleton";
@@ -61,6 +61,33 @@ function StatusOrb({ state = "idle" }) {
       <span className={`text-[11px] font-semibold ${config.labelColor}`}>{config.label}</span>
     </div>
   );
+}
+
+// 13M-2: Render a "last cron run" timestamp relative to now. If the cron has
+// never fired we say so plainly — that's diagnostic info, not an error.
+const timeFmt = new Intl.DateTimeFormat(undefined, {
+  month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+});
+function fmtLastRun(lastRunAt) {
+  if (!lastRunAt) return { text: "never", tone: "warn" };
+  const date = new Date(lastRunAt);
+  if (Number.isNaN(date.getTime())) return { text: "unknown", tone: "warn" };
+
+  const diffMs = Date.now() - date.getTime();
+  const diffHours = diffMs / 36e5;
+  // Fresh = within 26h (covers a daily cron with clock drift). Stale beyond.
+  const tone = diffHours <= 26 ? "ready" : "warn";
+
+  let relative;
+  if (diffHours < 1) {
+    const mins = Math.max(1, Math.round(diffMs / 60000));
+    relative = `${mins}m ago`;
+  } else if (diffHours < 48) {
+    relative = `${Math.round(diffHours)}h ago`;
+  } else {
+    relative = `${Math.round(diffHours / 24)}d ago`;
+  }
+  return { text: relative, tone, absolute: timeFmt.format(date) };
 }
 
 function InfoRow({ label, value, tone = "neutral" }) {
@@ -183,6 +210,36 @@ export default function ApolloOperationsStatus() {
             ) : (
               <div className="text-xs text-white/40">Not loaded</div>
             )}
+
+            {/* 13M-2: last scheduled cron run — diagnoses whether the cron is
+                actually firing. Reads apollo_agent_runs where run_type='scheduled'. */}
+            {heartbeat?.lastScheduledRun !== undefined && (() => {
+              const last = heartbeat.lastScheduledRun ?? {};
+              const fmt = fmtLastRun(last.lastRunAt);
+              return (
+                <div className="mt-4 pt-3 border-t border-bg-border/50">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Clock size={12} className="text-white/30" />
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-white/30">Last cron run</span>
+                  </div>
+                  <InfoRow
+                    label="fired"
+                    value={fmt.text}
+                    tone={fmt.tone}
+                  />
+                  {fmt.absolute && (
+                    <InfoRow label="at" value={fmt.absolute} />
+                  )}
+                  {last.status && (
+                    <InfoRow
+                      label="status"
+                      value={last.status}
+                      tone={last.status === "completed" ? "ready" : last.status === "failed" || last.status === "blocked" ? "warn" : "neutral"}
+                    />
+                  )}
+                </div>
+              );
+            })()}
 
             {context && (
               <div className="mt-4 pt-3 border-t border-bg-border/50">
