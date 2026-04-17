@@ -160,13 +160,15 @@ async function handlePost(request, auth) {
     return json({ error: "Invalid JSON body." }, 400);
   }
 
-  // 13J-1: POST now has two modes.
+  // 13J-1 + 13J-3: POST has three modes.
   //   mode = "decide" (default) — head coach approves or rejects a pending row
   //   mode = "retry"            — re-execute an approved row whose execution errored
+  //   mode = "undo"             — queue an access.restore for a completed access.revoke
   const mode = body?.mode ?? "decide";
   if (mode === "retry") return handleRetry(body, auth);
+  if (mode === "undo") return handleUndo(body, auth);
   if (mode === "decide") return handleDecide(body, auth);
-  return json({ error: "Unknown mode. Use 'decide' or 'retry'." }, 400);
+  return json({ error: "Unknown mode. Use 'decide', 'retry', or 'undo'." }, 400);
 }
 
 async function handleDecide(body, auth) {
@@ -335,6 +337,106 @@ async function handleRetry(body, auth) {
     .update({ execution_error: result.error ?? "Unknown executor error" })
     .eq("id", approvalId);
   return json({ ok: false, status: "approved", executed: false, error: result.error }, 200);
+}
+
+// 13J-3: Queue an access.restore approval that reverses a completed
+// access.revoke. This is a narrow endpoint — it ONLY creates a new pending
+// access.restore row from a valid source approval. The head coach still
+// explicitly approves (or rejects) the restore through the normal decide flow.
+//
+// Guardrails:
+//   - Source must be status = "completed" AND action_key = "access.revoke"
+//   - Source execution_result must contain profileId + previousRole
+//   - previousRole cannot be "revoked" (would be a no-op loop)
+//   - Dedup: refuse if a pending OR completed access.restore already exists
+//     for the same sourceApprovalId (one undo per revoke)
+async function handleUndo(body, auth) {
+  const { approvalId } = body ?? {};
+  if (!approvalId) {
+    return json({ error: "Undo needs { approvalId }." }, 400);
+  }
+
+  const client = makeSupabaseClient(SUPABASE_ANON_KEY, auth.accessToken);
+  const { data: source, error: loadError } = await client
+    .from("apollo_approvals")
+    .select("id,status,action_key,execution_result")
+    .eq("id", approvalId)
+    .single();
+
+  if (loadError || !source) {
+    return json({ error: "Source approval not found." }, 404);
+  }
+
+  if (source.action_key !== "access.revoke") {
+    return json({ error: "Undo is only supported for access.revoke." }, 409);
+  }
+  if (source.status !== "completed") {
+    return json({
+      error: `Undo requires the source revoke to be completed (current: ${source.status}).`,
+    }, 409);
+  }
+
+  const result = source.execution_result ?? {};
+  const profileId = result.profileId;
+  const previousRole = result.previousRole;
+  if (!profileId || !previousRole) {
+    return json({
+      error: "Source revoke has no snapshot (previousRole/profileId). Undo is unavailable.",
+    }, 409);
+  }
+  if (previousRole === "revoked") {
+    return json({ error: "Previous role was already 'revoked' — nothing to restore to." }, 409);
+  }
+
+  // Dedup: one undo per revoke. Check sourceApprovalId on existing restore rows.
+  const { data: existing, error: dupError } = await client
+    .from("apollo_approvals")
+    .select("id,status")
+    .eq("action_key", "access.restore")
+    .contains("action_payload", { sourceApprovalId: approvalId })
+    .limit(1);
+
+  if (!dupError && existing && existing.length > 0) {
+    return json({
+      error: `Undo already ${existing[0].status === "completed" ? "applied" : "queued"} for this revoke.`,
+    }, 409);
+  }
+
+  const tierInfo = resolveTier("access.restore");
+  if (!tierInfo.found) {
+    return json({ error: "access.restore is not registered." }, 500);
+  }
+
+  const payload = {
+    profileId,
+    targetRole: previousRole,
+    sourceApprovalId: approvalId,
+  };
+
+  const { data: inserted, error: insertError } = await client
+    .from("apollo_approvals")
+    .insert({
+      // Undo rows are not linked to a finding — they originate from a prior
+      // approval, not an agent run. finding_id is nullable on purpose.
+      finding_id: null,
+      action_key: "access.restore",
+      action_label: tierInfo.label,
+      action_payload: payload,
+      autonomy_tier: tierInfo.tier,
+      risk_level: "medium",
+      status: "pending",
+      requested_by: auth.actor.name ?? "head_coach_undo",
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !inserted) {
+    return json({
+      error: `Could not queue restore approval: ${insertError?.message ?? "unknown"}`,
+    }, 500);
+  }
+
+  return json({ ok: true, status: "pending", approvalId: inserted.id });
 }
 
 async function handleRequest(request) {

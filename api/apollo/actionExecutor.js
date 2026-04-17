@@ -128,6 +128,10 @@ registerAction({
 //   Tier: approval_required. Destructive in the sense that it flips a user's
 //   role label — RLS already blocks them via access_expires_on, but the role
 //   flip makes the state consistent and visible in Admin → Access.
+//
+// 13J-3: before flipping we snapshot the current role into the result under
+// `previousRole`. This is what the Undo button reads to queue an
+// `access.restore` approval that reverses the change.
 registerAction({
   key: "access.revoke",
   label: "Revoke profile access (set role = revoked)",
@@ -136,12 +140,74 @@ registerAction({
   async handler(payload, ctx) {
     const { profileId } = payload ?? {};
     if (!profileId) return { ok: false, error: "access.revoke needs profileId" };
+
+    // Snapshot the prior role so Undo has something to restore. Use maybeSingle
+    // so a missing profile doesn't throw — we'll handle it as an error below.
+    const { data: before, error: readError } = await ctx.supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", profileId)
+      .maybeSingle();
+    if (readError) return { ok: false, error: `Could not read current role: ${readError.message}` };
+    if (!before) return { ok: false, error: `Profile ${profileId} not found` };
+
+    const previousRole = before.role ?? null;
+    // If already revoked, treat as idempotent success but carry the "previous"
+    // over unchanged so Undo still points somewhere sensible (no-op restore).
+    if (previousRole === "revoked") {
+      return { ok: true, result: { profileId, role: "revoked", previousRole, skipped: "already_revoked" } };
+    }
+
     const { error } = await ctx.supabase
       .from("profiles")
       .update({ role: "revoked" })
       .eq("id", profileId);
     if (error) return { ok: false, error: error.message };
-    return { ok: true, result: { profileId, role: "revoked" } };
+    return { ok: true, result: { profileId, role: "revoked", previousRole } };
+  },
+});
+
+// Security · restore a profile's role after a revoke.
+//   Tier: approval_required. Reverses an access.revoke by setting role back to
+//   its pre-revoke value. Queued via the Undo button in the Approval Inbox,
+//   which pulls `previousRole` + `profileId` from the source revoke's
+//   execution_result. Head coach still has to approve the restore — the undo
+//   button does NOT auto-execute.
+registerAction({
+  key: "access.restore",
+  label: "Restore profile access (reverse revoke)",
+  tier: "approval_required",
+  category: "access_control",
+  async handler(payload, ctx) {
+    const { profileId, targetRole } = payload ?? {};
+    if (!profileId) return { ok: false, error: "access.restore needs profileId" };
+    if (!targetRole || typeof targetRole !== "string") {
+      return { ok: false, error: "access.restore needs targetRole" };
+    }
+    // Refuse to "restore" into revoked — that's not a restore, that's a revoke.
+    if (targetRole === "revoked") {
+      return { ok: false, error: "access.restore targetRole cannot be 'revoked'" };
+    }
+
+    const { data: before, error: readError } = await ctx.supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", profileId)
+      .maybeSingle();
+    if (readError) return { ok: false, error: `Could not read current role: ${readError.message}` };
+    if (!before) return { ok: false, error: `Profile ${profileId} not found` };
+
+    const previousRole = before.role ?? null;
+    if (previousRole === targetRole) {
+      return { ok: true, result: { profileId, role: targetRole, previousRole, skipped: "already_target" } };
+    }
+
+    const { error } = await ctx.supabase
+      .from("profiles")
+      .update({ role: targetRole })
+      .eq("id", profileId);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, result: { profileId, role: targetRole, previousRole } };
   },
 });
 

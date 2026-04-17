@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2, XCircle, ShieldCheck, Clock, RefreshCw,
-  AlertTriangle, Inbox, History, Loader2, MessageSquareMore, RotateCcw,
+  AlertTriangle, Inbox, History, Loader2, MessageSquareMore, RotateCcw, Undo2,
 } from "lucide-react";
-import { fetchApprovals, decideApproval, retryApprovalExecution } from "../lib/apolloApprovals";
+import {
+  fetchApprovals, decideApproval, retryApprovalExecution, undoAccessRevoke,
+} from "../lib/apolloApprovals";
 import { SkeletonList } from "./ui/Skeleton";
 import EmptyState from "./ui/EmptyState";
 
@@ -163,7 +165,7 @@ function PendingApprovalRow({ approval, onDecide, busy }) {
   );
 }
 
-function DecidedApprovalRow({ approval, onRetry, retrying }) {
+function DecidedApprovalRow({ approval, onRetry, retrying, onUndo, undoing }) {
   const finding = approval.finding;
   const status = approval.status;
   // 13J-1: retry is only offered when the server will actually allow it —
@@ -171,6 +173,14 @@ function DecidedApprovalRow({ approval, onRetry, retrying }) {
   // completed, or approved-without-error) means there's nothing to retry.
   const canRetry = status === "approved" && Boolean(approval.execution_error);
   const resultSummary = fmtExecutionResult(approval.execution_result);
+  // 13J-3: Undo is offered only for completed access.revoke rows that have a
+  // previousRole snapshot. Server enforces the real gate (dedup + validity),
+  // this is just the UI hint.
+  const canUndo =
+    status === "completed" &&
+    approval.action_key === "access.revoke" &&
+    approval.execution_result?.previousRole &&
+    approval.execution_result.previousRole !== "revoked";
 
   return (
     <div className="rounded-lg border border-bg-border/60 bg-bg-soft/50 px-4 py-3">
@@ -211,6 +221,20 @@ function DecidedApprovalRow({ approval, onRetry, retrying }) {
                 ? <Loader2 size={11} className="animate-spin" />
                 : <RotateCcw size={11} />}
               Retry
+            </button>
+          )}
+          {canUndo && onUndo && (
+            <button
+              type="button"
+              onClick={() => onUndo(approval.id)}
+              disabled={undoing}
+              title={`Queue restore to role: ${approval.execution_result.previousRole}`}
+              className="btn btn-secondary py-1 px-2 text-[11px] disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {undoing
+                ? <Loader2 size={11} className="animate-spin" />
+                : <Undo2 size={11} />}
+              Undo
             </button>
           )}
           <span className={`${decisionStyle[status] ?? decisionStyle.pending}`}>
@@ -287,6 +311,25 @@ export default function ApolloApprovalInbox({ onChange }) {
       onChange?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not retry approval.");
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  // 13J-3: Queue a restore approval that reverses a completed access.revoke.
+  // The restore itself is NOT auto-executed — it lands in pending and the head
+  // coach still has to approve it through the normal flow. Once queued we flip
+  // the view to "pending" so the new row is immediately visible.
+  const handleUndo = async (approvalId) => {
+    setBusyId(approvalId);
+    setError("");
+    try {
+      await undoAccessRevoke({ approvalId });
+      await load("refresh");
+      setView("pending");
+      onChange?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not queue undo.");
     } finally {
       setBusyId("");
     }
@@ -400,6 +443,8 @@ export default function ApolloApprovalInbox({ onChange }) {
                     approval={approval}
                     onRetry={handleRetry}
                     retrying={busyId === approval.id}
+                    onUndo={handleUndo}
+                    undoing={busyId === approval.id}
                   />
                 )}
               </Motion.div>

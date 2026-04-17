@@ -40,6 +40,26 @@ export async function decideApproval({ approvalId, decision, notes = "" }) {
   return payload;
 }
 
+// 13J-3: Queue an access.restore approval that reverses a completed
+// access.revoke. Does NOT execute the restore — just creates a new pending
+// approval row. Head coach still approves it through the normal flow.
+export async function undoAccessRevoke({ approvalId }) {
+  const token = await getAuthToken();
+  const response = await fetch("/api/apollo/approvals", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ approvalId, mode: "undo" }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error ?? `Could not queue undo (${response.status}).`);
+  }
+  return payload;
+}
+
 // 13J-1: Re-execute an approved action whose initial execution errored.
 // Only rows with status = "approved" + execution_error are retryable; the
 // server enforces that gate.

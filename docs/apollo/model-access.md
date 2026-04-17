@@ -110,3 +110,32 @@ Apollo moved from advisory-only to an executing command layer. Three sequential 
 - DrillScout autonomy is bounded by proposal count + library-size ceilings (stops at 3 pending or 20 approved).
 
 ### Status: ✅ Action system live, end-to-end
+
+## 13J Record — Approval Lifecycle Polish
+
+Three-part cleanup so the action system feels finished: every approval now has a visible result, a retry path, and a one-click undo for destructive actions.
+
+### 13J-1 — Retry failed executions
+- `POST /api/apollo/approvals` accepts `mode: "retry"` (new `handleRetry`). Validates the source row is `status = approved` AND has `execution_error` set, re-runs through `executeAction`, flips to `completed` on success.
+- `retryApprovalExecution({ approvalId })` added to `src/lib/apolloApprovals.js`.
+- `DecidedApprovalRow` surfaces a Retry button on matching rows.
+
+### 13J-2 — Surface execution_result in the UI
+- New `fmtExecutionResult` helper renders the JSONB result as a human-readable one-liner under completed rows (e.g. `role: revoked · previousRole: coach`). Strips bare ID fields to avoid UUID noise.
+- No API change — `execution_result` column already flowed through the GET endpoint.
+
+### 13J-3 — Undo for destructive actions (access.revoke only)
+- `access.revoke` handler now snapshots the prior role into `execution_result.previousRole` before flipping to `revoked`. Idempotent on already-revoked profiles.
+- New action `access.restore` (tier: `approval_required`, category: `access_control`). Reads `{ profileId, targetRole }`, refuses `targetRole = 'revoked'`, flips back.
+- `POST /api/apollo/approvals` accepts `mode: "undo"` (new `handleUndo`). Creates a pending `access.restore` approval from a completed `access.revoke` row. Does NOT auto-execute — the head coach still approves the restore through the normal flow.
+- Dedup: one undo per revoke, enforced by checking `action_payload.sourceApprovalId` on existing restore rows.
+- `undoAccessRevoke({ approvalId })` added to `src/lib/apolloApprovals.js`.
+- `DecidedApprovalRow` shows an Undo button only when the row is a completed `access.revoke` with a restorable `previousRole`. After clicking, the inbox flips to the Pending view so the new restore approval is immediately visible.
+- Scope is intentionally narrow: undo applies to `access.revoke` only. Other action types get undo if/when friction demands it.
+
+### Hard rules still honored
+- Undo never auto-executes. The restore lands as a pending approval; head coach still clicks approve.
+- Retry reuses the same tier gate as the original approval — a demoted/removed action won't re-execute.
+- execution_result now shapes the audit trail: every completed row says what actually changed.
+
+### Status: ✅ Lifecycle polish shipped
