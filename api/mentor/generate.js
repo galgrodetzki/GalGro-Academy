@@ -164,6 +164,34 @@ function humanDate(dateKey) {
   }
 }
 
+// Shared base for placeholder substitution — every trigger type gets these.
+// Scenario-specific loops spread this and override the context fields
+// (opponent / game_date / session_name / session_target) they own.
+function keeperVars(keeper) {
+  const name = (keeper?.preferred_name && keeper.preferred_name.trim())
+    || firstName(keeper?.name)
+    || "";
+  return {
+    keeper_name: name,
+    preferred_name: name,
+    current_focus: keeper?.current_focus || "",
+    idol: keeper?.idol || "",
+    opponent: "",
+    game_date: "",
+    session_name: "",
+    session_target: "",
+  };
+}
+
+// True when today's UTC month+day matches the keeper's stored birthday
+// (year ignored — kids have any year in there and birthday wishes are about
+// the calendar day).
+function isBirthdayToday(birthday, todayKey) {
+  if (!birthday || typeof birthday !== "string") return false;
+  // Both birthday and todayKey are YYYY-MM-DD strings.
+  return birthday.slice(5) === todayKey.slice(5);
+}
+
 async function loadEnabledTemplates(client) {
   const { data, error } = await client
     .from("mentor_templates")
@@ -182,10 +210,12 @@ async function loadEnabledTemplates(client) {
 async function loadKeeperProfiles(client) {
   // Keepers whose access hasn't expired. Match against profiles table;
   // players.profile_id links the roster player to the profile.
+  // E2: also pulls preferred_name / birthday / current_focus / idol for
+  // richer placeholder substitution and the birthday trigger.
   const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await client
     .from("profiles")
-    .select("id,name,role,access_expires_on")
+    .select("id,name,role,access_expires_on,preferred_name,birthday,current_focus,idol")
     .eq("role", "keeper");
   if (error) throw new Error(`Could not load keeper profiles: ${error.message}`);
   return (data || []).filter((p) => !p.access_expires_on || p.access_expires_on >= today);
@@ -325,11 +355,9 @@ async function generateForWindow({ client, templatesByTrigger, keepers, players,
       for (const keeper of sessionKeepers) {
         for (const tpl of trainingTemplates) {
           const vars = {
-            keeper_name: firstName(keeper.name),
+            ...keeperVars(keeper),
             session_name: session.name || "today's session",
             session_target: session.target || "today's focus",
-            game_date: "",
-            opponent: "",
           };
           const body = substitute(tpl.body, vars);
           const title = substitute(tpl.title, vars);
@@ -364,11 +392,9 @@ async function generateForWindow({ client, templatesByTrigger, keepers, players,
       for (const keeper of keepers) {
         for (const tpl of gameDayTemplates) {
           const vars = {
-            keeper_name: firstName(keeper.name),
+            ...keeperVars(keeper),
             opponent: game.opponent || "the opponent",
             game_date: humanDate(game.game_date),
-            session_name: "",
-            session_target: "",
           };
           const result = await insertMessage(client, {
             keeper_profile_id: keeper.id,
@@ -407,11 +433,9 @@ async function generateForWindow({ client, templatesByTrigger, keepers, players,
       for (const keeper of keepers) {
         for (const tpl of eveTemplates) {
           const vars = {
-            keeper_name: firstName(keeper.name),
+            ...keeperVars(keeper),
             opponent: game.opponent || "the opponent",
             game_date: humanDate(game.game_date),
-            session_name: "",
-            session_target: "",
           };
           const result = await insertMessage(client, {
             keeper_profile_id: keeper.id,
@@ -437,6 +461,38 @@ async function generateForWindow({ client, templatesByTrigger, keepers, players,
           } else {
             errors.push({ keeper: keeper.name, trigger: "game_day_eve", template: tpl.title, error: result.kind });
           }
+        }
+      }
+    }
+  }
+
+  // --- birthday: match today's month+day to each keeper's profile.birthday.
+  // No external signal — pure profile-driven. Dedupe by the unique constraint
+  // on (keeper_profile_id, trigger_date, trigger_type, template_id).
+  const birthdayTemplates = templatesByTrigger.get("birthday") || [];
+  if (birthdayTemplates.length > 0) {
+    const birthdayKeepers = keepers.filter((k) => isBirthdayToday(k.birthday, today));
+    for (const keeper of birthdayKeepers) {
+      for (const tpl of birthdayTemplates) {
+        const vars = keeperVars(keeper);
+        const title = substitute(tpl.title, vars);
+        const body = substitute(tpl.body, vars);
+        const result = await insertMessage(client, {
+          keeper_profile_id: keeper.id,
+          trigger_date: today,
+          trigger_type: "birthday",
+          template_id: tpl.id,
+          generated_title: title,
+          generated_body: body,
+          metadata: { birthday: keeper.birthday },
+        });
+        if (result.ok) {
+          created.push({ keeper: keeper.name, trigger: "birthday", template: tpl.title });
+          await pushForMessage({ keeper, triggerType: "birthday", tpl, title, body });
+        } else if (result.kind === "duplicate") {
+          skipped.push({ keeper: keeper.name, trigger: "birthday", template: tpl.title });
+        } else {
+          errors.push({ keeper: keeper.name, trigger: "birthday", template: tpl.title, error: result.kind });
         }
       }
     }
