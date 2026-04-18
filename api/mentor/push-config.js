@@ -9,12 +9,24 @@ const JSON_HEADERS = {
   "Cache-Control": "no-store",
 };
 
-export default async function handler() {
-  return new Response(
-    JSON.stringify({
-      configured: isPushConfigured(),
-      publicKey: isPushConfigured() ? getVapidPublicKey() : null,
-    }),
-    { status: 200, headers: JSON_HEADERS }
-  );
-}
+export default {
+  async fetch(request) {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: JSON_HEADERS });
+    }
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ error: "Method not allowed." }), {
+        status: 405,
+        headers: JSON_HEADERS,
+      });
+    }
+    const configured = isPushConfigured();
+    return new Response(
+      JSON.stringify({
+        configured,
+        publicKey: configured ? getVapidPublicKey() : null,
+      }),
+      { status: 200, headers: JSON_HEADERS }
+    );
+  },
+};

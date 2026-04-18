@@ -445,7 +445,7 @@ async function generateForWindow({ client, templatesByTrigger, keepers, players,
   return { created, skipped, errors, pushStats };
 }
 
-export default async function handler(request) {
+async function runHandler(request) {
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
@@ -507,3 +507,7 @@ export default async function handler(request) {
     return json({ error: err?.message || "Mentor generator failed." }, 500);
   }
 }
+
+export default {
+  fetch: runHandler,
+};
