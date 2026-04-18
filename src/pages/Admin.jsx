@@ -9,7 +9,14 @@ import {
   Plus, Copy, Trash2, Check, Users, Shield, Key,
   Bot, Clock, CheckCircle2, XCircle, ChevronDown, ChevronUp,
   Sparkles, BookOpen, Dumbbell, Timer, Zap, PlayCircle,
+  CalendarDays, Edit3, Save, X,
 } from "lucide-react";
+import {
+  fetchGameDays,
+  createGameDay,
+  updateGameDay,
+  deleteGameDay,
+} from "../lib/gameDays";
 
 const ROLES = [
   { value: "assistant", label: "Assistant Coach", desc: "Can build & edit sessions" },
@@ -197,7 +204,16 @@ export default function Admin() {
   const [actionLoading, setActionLoading] = useState(false);
   const [copied, setCopied]     = useState(null);
   const [toast, setToast]       = useState("");
-  const [activeTab, setActiveTab] = useState("access"); // "access" | "apollo" | "inbox" | "library"
+  const [activeTab, setActiveTab] = useState("access"); // "access" | "apollo" | "inbox" | "library" | "calendar"
+
+  // Mentor-A2: game days CRUD state. Opponent/date are required, notes optional.
+  // Form defaults to today so an empty submit still produces a sensible date.
+  const todayIso = () => new Date().toISOString().slice(0, 10);
+  const emptyGameDayForm = () => ({ gameDate: todayIso(), opponent: "", notes: "" });
+  const [gameDays, setGameDays] = useState([]);
+  const [gameDayForm, setGameDayForm] = useState(emptyGameDayForm);
+  const [editingGameDayId, setEditingGameDayId] = useState(null);
+  const [gameDaySaving, setGameDaySaving] = useState(false);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
@@ -209,12 +225,18 @@ export default function Admin() {
       return;
     }
     setLoading(true);
-    const [inv, prof] = await Promise.all([
+    const [inv, prof, gd] = await Promise.all([
       supabase.from("invites").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("*").order("created_at", { ascending: true }),
+      fetchGameDays().catch((err) => {
+        // Non-fatal: a missing table shouldn't break the Admin page.
+        console.warn("game days load failed", err);
+        return [];
+      }),
     ]);
     if (inv.data)  setInvites(inv.data);
     if (prof.data) setProfiles(prof.data);
+    setGameDays(Array.isArray(gd) ? gd : []);
     setLoading(false);
   }, [isCoach]);
 
@@ -349,6 +371,69 @@ export default function Admin() {
     setActionLoading(false);
   };
 
+  // Mentor-A2 handlers — coach-write is enforced server-side via RLS policy
+  // "game_days_head_coach_write". The UI also gates on isCoach so non-coaches
+  // can't even see the tab.
+  const resetGameDayForm = () => {
+    setEditingGameDayId(null);
+    setGameDayForm(emptyGameDayForm());
+  };
+
+  const startEditGameDay = (gd) => {
+    setEditingGameDayId(gd.id);
+    setGameDayForm({
+      gameDate: gd.gameDate,
+      opponent: gd.opponent,
+      notes: gd.notes || "",
+    });
+  };
+
+  const handleSubmitGameDay = async (event) => {
+    event.preventDefault();
+    if (!isCoach) { showToast("Only the head coach can edit game days."); return; }
+    const opponent = gameDayForm.opponent.trim();
+    const gameDate = gameDayForm.gameDate.trim();
+    if (!opponent) { showToast("Add an opponent."); return; }
+    if (!gameDate) { showToast("Pick a game date."); return; }
+
+    setGameDaySaving(true);
+    try {
+      if (editingGameDayId) {
+        const updated = await updateGameDay(editingGameDayId, gameDayForm);
+        setGameDays((prev) =>
+          prev
+            .map((gd) => (gd.id === updated.id ? updated : gd))
+            .sort((a, b) => (a.gameDate < b.gameDate ? 1 : -1))
+        );
+        showToast("Game day updated.");
+      } else {
+        const created = await createGameDay(gameDayForm);
+        setGameDays((prev) =>
+          [created, ...prev].sort((a, b) => (a.gameDate < b.gameDate ? 1 : -1))
+        );
+        showToast("Game day added.");
+      }
+      resetGameDayForm();
+    } catch (err) {
+      showToast(err?.message || "Could not save game day.");
+    } finally {
+      setGameDaySaving(false);
+    }
+  };
+
+  const handleDeleteGameDay = async (gd) => {
+    if (!isCoach) { showToast("Only the head coach can delete game days."); return; }
+    if (!confirm(`Delete the game vs ${gd.opponent} on ${gd.gameDate}?`)) return;
+    try {
+      await deleteGameDay(gd.id);
+      setGameDays((prev) => prev.filter((row) => row.id !== gd.id));
+      if (editingGameDayId === gd.id) resetGameDayForm();
+      showToast("Game day removed.");
+    } catch (err) {
+      showToast(err?.message || "Could not delete game day.");
+    }
+  };
+
   const ROLE_COLORS = {
     head_coach: "text-accent border-accent/30 bg-accent/10",
     assistant:  "text-electric border-electric/30 bg-electric/10",
@@ -363,11 +448,17 @@ export default function Admin() {
   const pendingProposals  = proposals.filter((p) => p.status === "pending");
   const reviewedProposals = proposals.filter((p) => p.status !== "pending");
 
+  // Compute upcoming game count for the Calendar tab badge.
+  const upcomingGameDayCount = gameDays.filter(
+    (gd) => gd.gameDate >= todayIso()
+  ).length;
+
   const tabs = [
-    { id: "access",  label: "Access",        shortLabel: "Access", icon: Key },
-    { id: "apollo",  label: "Apollo",        shortLabel: "Apollo", icon: Shield },
-    { id: "inbox",   label: "Agent Inbox",   shortLabel: "Inbox",  icon: Bot,      badge: pendingProposalCount },
-    { id: "library", label: "Custom Drills", shortLabel: "Drills", icon: BookOpen, badge: customDrills.length || null },
+    { id: "access",   label: "Access",        shortLabel: "Access",   icon: Key },
+    { id: "apollo",   label: "Apollo",        shortLabel: "Apollo",   icon: Shield },
+    { id: "inbox",    label: "Agent Inbox",   shortLabel: "Inbox",    icon: Bot,          badge: pendingProposalCount },
+    { id: "calendar", label: "Calendar",      shortLabel: "Calendar", icon: CalendarDays, badge: upcomingGameDayCount || null },
+    { id: "library",  label: "Custom Drills", shortLabel: "Drills",   icon: BookOpen,     badge: customDrills.length || null },
   ];
 
   if (loading) return (
@@ -648,6 +739,211 @@ export default function Admin() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── CALENDAR TAB (Mentor-A2) ──
+          Head coach manages game_days here. Training sessions pull from
+          `sessions` table and will join this data on the /calendar page (A3)
+          + Today panels (A4). Multiple games per date are allowed but the
+          list is sorted newest-first so conflicts are visible. */}
+      {activeTab === "calendar" && (
+        <div>
+          <div className="card p-4 mb-5 border-accent/20 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <CalendarDays size={15} className="text-accent" />
+            </div>
+            <div>
+              <div className="font-bold text-sm mb-0.5">Team Calendar</div>
+              <p className="text-xs text-white/50 leading-relaxed">
+                Add the games the squad is preparing for. Training days already come from your scheduled sessions; this layer adds opponents and match-day notes. Everyone on the team can see them; only the head coach can edit.
+              </p>
+            </div>
+          </div>
+
+          {/* Add / edit form */}
+          <form
+            onSubmit={handleSubmitGameDay}
+            className="card p-5 mb-6 border border-bg-border"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              {editingGameDayId ? (
+                <Edit3 size={15} className="text-accent" />
+              ) : (
+                <Plus size={15} className="text-accent" />
+              )}
+              <h3 className="font-display font-bold text-sm">
+                {editingGameDayId ? "Edit game day" : "Add game day"}
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+              <label className="block">
+                <span className="text-[11px] font-semibold text-white/50 uppercase tracking-wider">
+                  Date
+                </span>
+                <input
+                  type="date"
+                  required
+                  value={gameDayForm.gameDate}
+                  onChange={(e) =>
+                    setGameDayForm((prev) => ({ ...prev, gameDate: e.target.value }))
+                  }
+                  className="mt-1 w-full bg-bg-soft border border-bg-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-[11px] font-semibold text-white/50 uppercase tracking-wider">
+                  Opponent
+                </span>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Maccabi Haifa U15"
+                  value={gameDayForm.opponent}
+                  onChange={(e) =>
+                    setGameDayForm((prev) => ({ ...prev, opponent: e.target.value }))
+                  }
+                  className="mt-1 w-full bg-bg-soft border border-bg-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                />
+              </label>
+            </div>
+
+            <label className="block mb-4">
+              <span className="text-[11px] font-semibold text-white/50 uppercase tracking-wider">
+                Notes <span className="text-white/30 normal-case">(optional)</span>
+              </span>
+              <textarea
+                rows={2}
+                placeholder="Kickoff time, home/away, specific prep notes…"
+                value={gameDayForm.notes}
+                onChange={(e) =>
+                  setGameDayForm((prev) => ({ ...prev, notes: e.target.value }))
+                }
+                className="mt-1 w-full bg-bg-soft border border-bg-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent resize-none"
+              />
+            </label>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={gameDaySaving || !isCoach}
+                className="px-4 py-2 rounded-lg bg-accent text-black text-xs font-bold flex items-center gap-1.5 disabled:opacity-40"
+              >
+                {editingGameDayId ? <Save size={13} /> : <Plus size={13} />}
+                {editingGameDayId ? "Save changes" : "Add game day"}
+              </button>
+              {editingGameDayId && (
+                <button
+                  type="button"
+                  onClick={resetGameDayForm}
+                  className="px-3 py-2 rounded-lg border border-bg-border text-white/60 hover:text-white text-xs font-bold flex items-center gap-1.5"
+                >
+                  <X size={13} />
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+
+          {/* Upcoming */}
+          {(() => {
+            const today = todayIso();
+            const upcoming = gameDays
+              .filter((gd) => gd.gameDate >= today)
+              .sort((a, b) => (a.gameDate < b.gameDate ? -1 : 1));
+            const past = gameDays
+              .filter((gd) => gd.gameDate < today)
+              .sort((a, b) => (a.gameDate < b.gameDate ? 1 : -1));
+
+            const renderRow = (gd) => (
+              <div
+                key={gd.id}
+                className="card p-4 flex items-start gap-3 border border-bg-border"
+              >
+                <div className="w-12 h-12 rounded-lg bg-accent/10 flex flex-col items-center justify-center flex-shrink-0">
+                  <span className="text-[10px] text-accent/70 font-bold uppercase tracking-wider">
+                    {new Date(gd.gameDate + "T00:00:00").toLocaleString(undefined, { month: "short" })}
+                  </span>
+                  <span className="text-base font-black text-accent leading-none">
+                    {new Date(gd.gameDate + "T00:00:00").getDate()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold truncate">vs {gd.opponent}</div>
+                  <div className="text-[11px] text-white/40 mt-0.5">
+                    {new Date(gd.gameDate + "T00:00:00").toLocaleDateString(undefined, {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </div>
+                  {gd.notes && (
+                    <p className="text-xs text-white/60 mt-1.5 whitespace-pre-wrap">
+                      {gd.notes}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => startEditGameDay(gd)}
+                    className="text-white/30 hover:text-accent transition-colors p-1"
+                    title="Edit"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteGameDay(gd)}
+                    className="text-white/25 hover:text-red-400 transition-colors p-1"
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+
+            return (
+              <>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[11px] font-bold text-white/50 uppercase tracking-wider">
+                    Upcoming
+                  </span>
+                  <span className="text-[10px] text-white/30">
+                    {upcoming.length} {upcoming.length === 1 ? "game" : "games"}
+                  </span>
+                </div>
+                {upcoming.length === 0 ? (
+                  <div className="card p-5 border border-dashed border-bg-border text-center text-xs text-white/40 mb-6">
+                    No upcoming games on the calendar. Add one above so the team knows what to prep for.
+                  </div>
+                ) : (
+                  <div className="space-y-2 mb-6">
+                    {upcoming.map(renderRow)}
+                  </div>
+                )}
+
+                {past.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider">
+                        Past games
+                      </span>
+                      <span className="text-[10px] text-white/30">
+                        {past.length}
+                      </span>
+                    </div>
+                    <div className="space-y-2 opacity-70">
+                      {past.map(renderRow)}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
