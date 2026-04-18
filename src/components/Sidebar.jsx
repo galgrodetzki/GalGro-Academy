@@ -1,4 +1,4 @@
-import { LayoutDashboard, BookOpen, Layers, Users, Calendar, Settings, LogOut, Shield, Palette } from "lucide-react";
+import { LayoutDashboard, BookOpen, Layers, Users, Calendar, CalendarDays, Settings, LogOut, Shield, Palette } from "lucide-react";
 import { motion as Motion } from "framer-motion";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { EMPTY_SESSION } from "../hooks/useSession";
@@ -12,6 +12,7 @@ const NAV = [
   { key: "library",   label: "Drill Library",   icon: BookOpen },
   { key: "builder",   label: "Session Builder", icon: Layers },
   { key: "sessions",  label: "My Sessions",     icon: Calendar },
+  { key: "calendar",  label: "Team Calendar",   icon: CalendarDays },
   { key: "players",   label: "Players",         icon: Users },
 ];
 

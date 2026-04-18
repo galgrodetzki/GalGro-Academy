@@ -16,6 +16,7 @@ const SessionBuilder = lazy(() => import("./pages/SessionBuilder"));
 const MySessions = lazy(() => import("./pages/MySessions"));
 const Players = lazy(() => import("./pages/Players"));
 const Admin = lazy(() => import("./pages/Admin"));
+const CalendarPage = lazy(() => import("./pages/Calendar"));
 const Styleguide = lazy(() => import("./pages/Styleguide"));
 
 function LoadingState({ label = "Loading academy..." }) {
@@ -135,6 +136,7 @@ function AppInner() {
               {activePage === "library"   && <DrillLibrary />}
               {activePage === "builder"   && <SessionBuilder />}
               {activePage === "sessions"  && <MySessions />}
+              {activePage === "calendar"  && <CalendarPage setPage={goTo} />}
               {activePage === "players"   && <Players />}
               {activePage === "admin"     && isCoach && <Admin setPage={goTo} />}
               {activePage === "styleguide"&& isCoach && <Styleguide />}
