@@ -8,7 +8,7 @@ import { formatAccessDate, getAccessStatus, getLocalDateKey } from "../utils/acc
 import {
   Plus, Copy, Trash2, Check, Users, Shield, Key,
   Bot, Clock, CheckCircle2, XCircle, ChevronDown, ChevronUp,
-  Sparkles, BookOpen, Dumbbell, Timer, Zap,
+  Sparkles, BookOpen, Dumbbell, Timer, Zap, PlayCircle,
 } from "lucide-react";
 
 const ROLES = [
@@ -70,6 +70,24 @@ function ProposalCard({ proposal, onApprove, onReject, loading }) {
         <span className="flex items-center gap-1"><Users size={11} /> {proposal.players}</span>
         {proposal.equipment && <span className="flex items-center gap-1"><Dumbbell size={11} /> {proposal.equipment}</span>}
       </div>
+
+      {/* Video link — shown prominently so Gal can watch the drill live
+          before deciding whether to approve. DrillScout writes video_url
+          on insert; this makes it visible in the review flow. */}
+      {proposal.video_url && (
+        <a
+          href={proposal.video_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-xs font-semibold text-accent/80 hover:text-accent bg-accent/5 hover:bg-accent/10 border border-accent/20 hover:border-accent/40 rounded-lg px-3 py-2 mb-3 transition-colors"
+        >
+          <PlayCircle size={14} />
+          Watch drill video
+          <span className="ml-auto text-[10px] text-white/30 truncate">
+            {(() => { try { return new URL(proposal.video_url).hostname.replace(/^www\./, ""); } catch { return ""; } })()}
+          </span>
+        </a>
+      )}
 
       {/* Description */}
       <p className="text-xs text-white/60 leading-relaxed mb-3 line-clamp-3">{proposal.description}</p>
