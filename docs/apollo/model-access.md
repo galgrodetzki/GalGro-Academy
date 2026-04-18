@@ -178,3 +178,46 @@ Cyber had been pure advisory since 13H. It now has an observe-tier action that a
 - No new table. Results live in the existing `apollo_findings` row via in-place update.
 
 ### Status: ✅ Cyber now active, not just advisory
+
+## 13M-3 Record — Weekly Digest
+
+Apollo now produces a human-readable weekly summary of portal activity and stores it as a durable `apollo_memory` entry (type: `project`, sensitivity: `internal`). This is the first phase where Apollo *produces something autonomously* rather than just reacting.
+
+### Flow
+- New runType on the runner: `weekly_digest`. Added to `ALLOWED_RUN_TYPES`.
+- `buildWeeklyDigest(actor, accessToken)` — reads the previous complete week (Mon 00:00 → Sun 23:59 UTC) via `getPreviousWeekWindow()`, runs four parallel aggregation queries (approvals decided, findings recorded, sessions created, drill proposals), tallies by status/severity/action/agent, and formats a plain-text body.
+- `persistWeeklyDigest(report, actor, accessToken)` — writes an `apollo_agent_runs` row (so the cron-visibility chip tracks the digest too) and inserts into `apollo_memory` with `memory_key = weekly_digest_<weekStartDay>`. Idempotent: if the key already exists, returns `already_exists` with the existing id.
+- `handleRun` branches on `runType === "weekly_digest"` before the shared `persistAuditRun` path — the digest does NOT go through the findings table.
+
+### What the body looks like
+```
+Week: 2026-04-06 → 2026-04-12
+
+Approvals decided: 5
+  status: completed ×3, rejected ×2
+  actions: access.revoke ×2, proposal.retire_stale ×3
+  execution errors: 0
+
+Findings recorded: 14
+  severity: info ×10, low ×1, medium ×2, critical ×1
+  agent: head_security ×4, qa_lead ×3, drill_scout ×3, head_cyber ×4
+
+Sessions created: 1
+Drill proposals: 2
+  status: pending ×1, approved ×1
+```
+
+### Triggering
+- Manual (head coach): `POST /api/apollo/runner` with `{ "runType": "weekly_digest" }`. Safe to call any day — it always reports on the previous complete week. Idempotent, so repeat calls in the same week return `already_exists`.
+- Scheduled: can be wired to a Vercel Cron calling the runner with `runType=weekly_digest` on Mondays. Same runner-secret auth as the daily heartbeat; no new secrets.
+
+### Hard rules honored
+- No findings emitted — digest is read-only aggregation.
+- No new secrets, no new tables, no schema change.
+- Idempotent per `memory_key` so the cron can fire freely without duplicates.
+- Reads scoped to the previous week only — no cross-week drift.
+
+### What 13M still owes (still deferred)
+- **13M-1 Token/cost counter** — still gated on real model-backed chat usage in production.
+
+### Status: ✅ Apollo now produces weekly output autonomously

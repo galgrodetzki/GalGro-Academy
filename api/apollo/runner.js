@@ -19,7 +19,7 @@ const MODEL_AUTH_MODE = process.env.AI_GATEWAY_API_KEY
     ? "vercel_oidc"
     : "locked";
 const MODEL_ACCESS_CONFIGURED = MODEL_AUTH_MODE !== "locked";
-const ALLOWED_RUN_TYPES = new Set(["readiness", "department_review", "heartbeat"]);
+const ALLOWED_RUN_TYPES = new Set(["readiness", "department_review", "heartbeat", "weekly_digest"]);
 
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -332,6 +332,277 @@ async function buildHeartbeatReport(actor, runType, accessToken) {
   };
 }
 
+// 13M-3: Weekly digest — aggregates the previous complete week (Mon-Sun, UTC)
+// and writes a single apollo_memory entry typed "project". Idempotent on the
+// memory_key so repeat calls in the same week are no-ops. No findings emitted.
+
+function getPreviousWeekWindow(reference = new Date()) {
+  // JS getUTCDay(): 0 = Sunday, 1 = Monday, ... 6 = Saturday.
+  // "Previous complete week" = most recent Monday-through-Sunday that has
+  // already ended. If today is Monday we want last week; if today is Sunday
+  // we still want last Mon-Sun (the one that ended yesterday? no — it ends
+  // today at 23:59). To avoid partial-week confusion we always look at the
+  // most recent Sunday that already passed.
+  const day = reference.getUTCDay();
+  const daysSincePrevSunday = day === 0 ? 7 : day; // Sunday → 1 week ago
+  const prevSundayEnd = new Date(Date.UTC(
+    reference.getUTCFullYear(),
+    reference.getUTCMonth(),
+    reference.getUTCDate() - daysSincePrevSunday,
+    23, 59, 59, 999,
+  ));
+  const prevMondayStart = new Date(Date.UTC(
+    prevSundayEnd.getUTCFullYear(),
+    prevSundayEnd.getUTCMonth(),
+    prevSundayEnd.getUTCDate() - 6,
+    0, 0, 0, 0,
+  ));
+  return {
+    weekStart: prevMondayStart,
+    weekEnd: prevSundayEnd,
+    startIso: prevMondayStart.toISOString(),
+    endIso: prevSundayEnd.toISOString(),
+    startDay: prevMondayStart.toISOString().slice(0, 10),
+    endDay: prevSundayEnd.toISOString().slice(0, 10),
+  };
+}
+
+function tally(rows, key) {
+  const out = {};
+  for (const row of rows ?? []) {
+    const k = row?.[key] ?? "unknown";
+    out[k] = (out[k] ?? 0) + 1;
+  }
+  return out;
+}
+
+function formatTally(obj) {
+  const entries = Object.entries(obj);
+  if (entries.length === 0) return "—";
+  return entries.map(([k, v]) => `${k} ×${v}`).join(", ");
+}
+
+async function buildWeeklyDigest(actor, accessToken) {
+  const client = accessToken
+    ? makeSupabaseClient(SUPABASE_ANON_KEY, accessToken)
+    : SERVICE_ROLE_KEY
+      ? makeSupabaseClient(SERVICE_ROLE_KEY)
+      : null;
+
+  const window = getPreviousWeekWindow();
+  const baseReport = {
+    summary: `Apollo weekly digest for ${window.startDay} - ${window.endDay}.`,
+    actor,
+    runType: "weekly_digest",
+    mode: actor.source === "runner_secret" ? "scheduled" : "manual",
+    window: { startIso: window.startIso, endIso: window.endIso, startDay: window.startDay, endDay: window.endDay },
+    memoryKey: `weekly_digest_${window.startDay}`,
+    memoryTitle: `Weekly digest: ${window.startDay} → ${window.endDay}`,
+    findings: [],
+  };
+
+  if (!client) {
+    return {
+      ...baseReport,
+      counts: null,
+      body: "Weekly digest skipped — no read client available.",
+      gates: ["No audit client configured"],
+    };
+  }
+
+  // Run the four aggregation queries in parallel. Each is scoped to the
+  // previous-week window by its natural timestamp column.
+  const [approvalsRes, findingsRes, sessionsRes, proposalsRes] = await Promise.all([
+    client
+      .from("apollo_approvals")
+      .select("status,action_key,decided_at,execution_error")
+      .gte("decided_at", window.startIso)
+      .lte("decided_at", window.endIso),
+    client
+      .from("apollo_findings")
+      .select("severity,agent_key,created_at")
+      .gte("created_at", window.startIso)
+      .lte("created_at", window.endIso),
+    client
+      .from("sessions")
+      .select("id,created_at")
+      .gte("created_at", window.startIso)
+      .lte("created_at", window.endIso),
+    client
+      .from("agent_proposals")
+      .select("status,created_at")
+      .gte("created_at", window.startIso)
+      .lte("created_at", window.endIso),
+  ]);
+
+  const approvals = approvalsRes.data ?? [];
+  const findings = findingsRes.data ?? [];
+  const sessions = sessionsRes.data ?? [];
+  const proposals = proposalsRes.data ?? [];
+
+  const counts = {
+    approvals: {
+      total: approvals.length,
+      byStatus: tally(approvals, "status"),
+      byAction: tally(approvals, "action_key"),
+      executionErrors: approvals.filter((a) => a.execution_error).length,
+    },
+    findings: {
+      total: findings.length,
+      bySeverity: tally(findings, "severity"),
+      byAgent: tally(findings, "agent_key"),
+    },
+    sessions: { total: sessions.length },
+    proposals: {
+      total: proposals.length,
+      byStatus: tally(proposals, "status"),
+    },
+  };
+
+  const errors = [approvalsRes.error, findingsRes.error, sessionsRes.error, proposalsRes.error]
+    .filter(Boolean)
+    .map((e) => e.message);
+
+  // Plain-text body (no markdown headers — renders readably in ApolloMemory).
+  const lines = [
+    `Week: ${window.startDay} → ${window.endDay}`,
+    "",
+    `Approvals decided: ${counts.approvals.total}`,
+  ];
+  if (counts.approvals.total > 0) {
+    lines.push(`  status: ${formatTally(counts.approvals.byStatus)}`);
+    lines.push(`  actions: ${formatTally(counts.approvals.byAction)}`);
+    if (counts.approvals.executionErrors > 0) {
+      lines.push(`  execution errors: ${counts.approvals.executionErrors}`);
+    }
+  }
+  lines.push("");
+  lines.push(`Findings recorded: ${counts.findings.total}`);
+  if (counts.findings.total > 0) {
+    lines.push(`  severity: ${formatTally(counts.findings.bySeverity)}`);
+    lines.push(`  agent: ${formatTally(counts.findings.byAgent)}`);
+  }
+  lines.push("");
+  lines.push(`Sessions created: ${counts.sessions.total}`);
+  lines.push(`Drill proposals: ${counts.proposals.total}`);
+  if (counts.proposals.total > 0) {
+    lines.push(`  status: ${formatTally(counts.proposals.byStatus)}`);
+  }
+  if (errors.length > 0) {
+    lines.push("");
+    lines.push(`Partial data — read errors: ${errors.join("; ")}`);
+  }
+
+  return {
+    ...baseReport,
+    counts,
+    body: lines.join("\n"),
+    gates: [
+      "Read-only aggregation",
+      "Idempotent per memory_key (one digest per week)",
+      "No findings, no approvals created",
+    ],
+    readErrors: errors,
+  };
+}
+
+async function persistWeeklyDigest(report, actor, accessToken) {
+  const client = accessToken
+    ? makeSupabaseClient(SUPABASE_ANON_KEY, accessToken)
+    : SERVICE_ROLE_KEY
+      ? makeSupabaseClient(SERVICE_ROLE_KEY)
+      : null;
+
+  if (!client) {
+    return {
+      status: "not_configured",
+      runId: null,
+      memoryId: null,
+      message: "Weekly digest skipped — no audit client available.",
+    };
+  }
+
+  // Record a run row so "Last cron run" in Operations Status tracks this too.
+  const ts = new Date().toISOString();
+  const { data: run, error: runError } = await client
+    .from("apollo_agent_runs")
+    .insert({
+      agent_key: "apollo",
+      agent_name: "Apollo",
+      run_type: actor.source === "runner_secret" ? "scheduled" : "manual",
+      status: "completed",
+      scope: "read_only",
+      summary: report.summary,
+      started_at: ts,
+      completed_at: ts,
+      created_by: actor.id,
+    })
+    .select("id")
+    .single();
+
+  if (runError) {
+    return {
+      status: "blocked",
+      runId: null,
+      memoryId: null,
+      message: `Audit run write failed: ${runError.message}`,
+    };
+  }
+
+  // Idempotent on memory_key: if this week's digest already exists, skip.
+  // Repeat runs in the same week are no-ops — the cron can fire freely.
+  const { data: existing } = await client
+    .from("apollo_memory")
+    .select("id,updated_at")
+    .eq("memory_key", report.memoryKey)
+    .maybeSingle();
+
+  if (existing) {
+    return {
+      status: "already_exists",
+      runId: run.id,
+      memoryId: existing.id,
+      message: `Digest for ${report.window.startDay} already recorded.`,
+    };
+  }
+
+  const { data: memory, error: memoryError } = await client
+    .from("apollo_memory")
+    .insert({
+      memory_key: report.memoryKey,
+      memory_type: "project",
+      sensitivity: "internal",
+      title: report.memoryTitle,
+      body: report.body,
+      metadata: {
+        source: "apollo_weekly_digest",
+        window: report.window,
+        counts: report.counts,
+        runId: run.id,
+      },
+      created_by: actor.id,
+      updated_by: actor.id,
+    })
+    .select("id")
+    .single();
+
+  if (memoryError) {
+    return {
+      status: "partial",
+      runId: run.id,
+      memoryId: null,
+      message: `Run recorded but memory write failed: ${memoryError.message}`,
+    };
+  }
+
+  return {
+    status: "recorded",
+    runId: run.id,
+    memoryId: memory.id,
+    message: "Weekly digest written to apollo_memory.",
+  };
+}
+
 function buildBlockedHeartbeatReport(actor, runType) {
   return {
     summary: "Apollo scheduled heartbeat blocked before execution.",
@@ -562,6 +833,20 @@ async function handleRun(request) {
       },
       report,
     }, 423);
+  }
+
+  // 13M-3: weekly_digest is a different persistence shape — it writes to
+  // apollo_memory instead of apollo_findings. Branch before the shared
+  // buildReport/persistAuditRun fallthrough.
+  if (runType === "weekly_digest") {
+    const report = await buildWeeklyDigest(auth.actor, auth.accessToken);
+    const audit = await persistWeeklyDigest(report, auth.actor, auth.accessToken);
+    return json({
+      runner: "apollo",
+      status: "completed",
+      audit,
+      report,
+    });
   }
 
   const report = runType === "department_review"
