@@ -9,7 +9,7 @@ import {
   Plus, Copy, Trash2, Check, Users, Shield, Key,
   Bot, Clock, CheckCircle2, XCircle, ChevronDown, ChevronUp,
   Sparkles, BookOpen, Dumbbell, Timer, Zap, PlayCircle,
-  CalendarDays, Edit3, Save, X,
+  CalendarDays, Edit3, Save, X, HeartHandshake,
 } from "lucide-react";
 import {
   fetchGameDays,
@@ -17,6 +17,7 @@ import {
   updateGameDay,
   deleteGameDay,
 } from "../lib/gameDays";
+import MentorTemplatesPanel from "../components/MentorTemplatesPanel";
 
 const ROLES = [
   { value: "assistant", label: "Assistant Coach", desc: "Can build & edit sessions" },
@@ -456,9 +457,10 @@ export default function Admin() {
   const tabs = [
     { id: "access",   label: "Access",        shortLabel: "Access",   icon: Key },
     { id: "apollo",   label: "Apollo",        shortLabel: "Apollo",   icon: Shield },
-    { id: "inbox",    label: "Agent Inbox",   shortLabel: "Inbox",    icon: Bot,          badge: pendingProposalCount },
-    { id: "calendar", label: "Calendar",      shortLabel: "Calendar", icon: CalendarDays, badge: upcomingGameDayCount || null },
-    { id: "library",  label: "Custom Drills", shortLabel: "Drills",   icon: BookOpen,     badge: customDrills.length || null },
+    { id: "inbox",    label: "Agent Inbox",   shortLabel: "Inbox",    icon: Bot,             badge: pendingProposalCount },
+    { id: "calendar", label: "Calendar",      shortLabel: "Calendar", icon: CalendarDays,    badge: upcomingGameDayCount || null },
+    { id: "mentor",   label: "Mentor",        shortLabel: "Mentor",   icon: HeartHandshake },
+    { id: "library",  label: "Custom Drills", shortLabel: "Drills",   icon: BookOpen,        badge: customDrills.length || null },
   ];
 
   if (loading) return (
@@ -945,6 +947,11 @@ export default function Admin() {
             );
           })()}
         </div>
+      )}
+
+      {/* ── MENTOR TAB (Mentor-B2) ── */}
+      {activeTab === "mentor" && (
+        <MentorTemplatesPanel isCoach={isCoach} onToast={showToast} />
       )}
 
       {/* ── CUSTOM DRILLS LIBRARY TAB ── */}
