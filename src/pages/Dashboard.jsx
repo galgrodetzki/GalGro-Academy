@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion as Motion } from "framer-motion";
 import {
   Activity,
@@ -6,12 +6,15 @@ import {
   Award,
   BookOpen,
   Calendar,
+  CalendarDays,
   CheckCircle2,
   Clock,
+  Dumbbell,
   Layers,
   Link2,
   MessageSquareText,
   Sparkles,
+  Swords,
   Target,
   TrendingUp,
   UserCheck,
@@ -23,6 +26,7 @@ import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
 import { heroPanelMotion, softCardHover, softTap, staggerContainer, staggerItem } from "../utils/motion";
 import { writeSessionNavIntent } from "../utils/sessionNavIntent";
+import { fetchGameDays } from "../lib/gameDays";
 
 const STAT_ACCENTS = {
   accent: "bg-accent/10 text-accent",
@@ -285,6 +289,17 @@ export default function Dashboard({ setPage }) {
           </>
         )}
       </Motion.div>
+
+      {/* Mentor-A4: Today & upcoming panel — surfaces the next training
+          session and game day so the team doesn't have to open the
+          calendar to know what's next. Coaches see all sessions; keepers
+          see only the sessions they're rostered in. */}
+      <TodayPanel
+        sessions={savedSessions}
+        currentPlayer={isKeeper ? currentPlayer : null}
+        isKeeper={isKeeper}
+        setPage={setPage}
+      />
 
       {isKeeper && (
         <KeeperPortal
@@ -702,5 +717,175 @@ function QuickActionCard({ onClick, icon: Icon, iconClassName, title, detail, cl
       <div className="font-bold mb-1 transition-colors group-hover:text-accent">{title}</div>
       <div className="text-xs text-white/50">{detail}</div>
     </Motion.button>
+  );
+}
+
+// Mentor-A4 — Today & upcoming panel.
+// Shows today's + the next-up training and game day, unified. Keepers only
+// see sessions they're rostered in. Click-through jumps to the full calendar.
+function TodayPanel({ sessions, currentPlayer, isKeeper, setPage }) {
+  const [gameDays, setGameDays] = useState([]);
+  const [gameDaysLoaded, setGameDaysLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchGameDays()
+      .then((rows) => {
+        if (!cancelled) setGameDays(rows);
+      })
+      .catch(() => {
+        // Non-fatal: panel just falls back to sessions-only.
+        if (!cancelled) setGameDays([]);
+      })
+      .finally(() => {
+        if (!cancelled) setGameDaysLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const todayKey = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
+  const upcomingSessions = (sessions || [])
+    .filter((s) => {
+      if (!s.sessionDate) return false;
+      if (s.sessionDate < todayKey) return false;
+      if (isKeeper && currentPlayer) {
+        return Array.isArray(s.playerIds) && s.playerIds.includes(currentPlayer.id);
+      }
+      return true;
+    })
+    .sort((a, b) => (a.sessionDate > b.sessionDate ? 1 : -1));
+
+  const upcomingGames = gameDays
+    .filter((gd) => gd.gameDate >= todayKey)
+    .sort((a, b) => (a.gameDate > b.gameDate ? 1 : -1));
+
+  // Build a merged list of the next ~3 items.
+  const merged = [];
+  upcomingSessions.slice(0, 3).forEach((s) => {
+    merged.push({
+      kind: "session",
+      date: s.sessionDate,
+      title: s.name,
+      detail: s.totalDuration ? `${s.totalDuration} min` : "",
+      id: s.id,
+    });
+  });
+  upcomingGames.slice(0, 3).forEach((gd) => {
+    merged.push({
+      kind: "game",
+      date: gd.gameDate,
+      title: `vs ${gd.opponent}`,
+      detail: gd.notes || "",
+      id: gd.id,
+    });
+  });
+  merged.sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : a.kind > b.kind ? 1 : -1));
+  const next = merged.slice(0, 4);
+
+  // Hide the panel entirely if there's nothing to show and we've already
+  // tried to load — keeps the dashboard clean for new accounts.
+  if (gameDaysLoaded && next.length === 0) return null;
+
+  const fmt = (key) => {
+    const [y, m, d] = key.split("-").map(Number);
+    const when = new Date(y, (m || 1) - 1, d || 1);
+    if (key === todayKey) return "Today";
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tKey = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+    if (key === tKey) return "Tomorrow";
+    return when.toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  return (
+    <Motion.div
+      className="card card-hover p-5 mb-6 border border-bg-border"
+      variants={staggerItem}
+      initial="initial"
+      animate="animate"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <CalendarDays size={16} className="text-accent" />
+          <h3 className="font-display font-bold text-sm">Today & upcoming</h3>
+        </div>
+        <button
+          type="button"
+          onClick={() => setPage && setPage("calendar")}
+          className="text-xs font-semibold text-white/50 hover:text-accent transition-colors flex items-center gap-1"
+        >
+          Open calendar
+          <ArrowRight size={12} />
+        </button>
+      </div>
+
+      {next.length === 0 ? (
+        <div className="text-xs text-white/40">
+          {gameDaysLoaded
+            ? "No sessions or games scheduled yet."
+            : "Loading schedule…"}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {next.map((item) => {
+            const isGame = item.kind === "game";
+            return (
+              <button
+                key={`${item.kind}-${item.id}`}
+                type="button"
+                onClick={() => setPage && setPage("calendar")}
+                className={`w-full flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                  isGame
+                    ? "border-red-500/25 bg-red-500/5 hover:border-red-500/40"
+                    : "border-accent/25 bg-accent/5 hover:border-accent/40"
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    isGame ? "bg-red-500/15" : "bg-accent/15"
+                  }`}
+                >
+                  {isGame ? (
+                    <Swords size={14} className="text-red-300" />
+                  ) : (
+                    <Dumbbell size={14} className="text-accent" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider ${
+                        isGame ? "text-red-300/80" : "text-accent/80"
+                      }`}
+                    >
+                      {fmt(item.date)}
+                    </span>
+                    <span className="text-[10px] text-white/30">
+                      {isGame ? "GAME" : "TRAINING"}
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold truncate">{item.title}</div>
+                  {item.detail && (
+                    <div className="text-[11px] text-white/50 mt-0.5 line-clamp-1">
+                      {item.detail}
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Motion.div>
   );
 }
