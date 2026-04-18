@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { buildApolloContextPacks } from "./contextPacks.js";
+import { getBudgetStatus } from "./_tokens.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL
   ?? process.env.VITE_SUPABASE_URL
@@ -125,9 +126,10 @@ async function handleStatus(request) {
   const auth = await authorizeHeadCoach(request);
   if (!auth.ok) return json({ error: auth.error }, auth.status);
 
-  const [context, lastScheduled] = await Promise.all([
+  const [context, lastScheduled, tokens] = await Promise.all([
     buildApolloContextPacks({ supabase: auth.supabase, actor: auth.actor }),
     fetchLastScheduledRun(auth.supabase),
+    getBudgetStatus(auth.supabase),
   ]);
   const modelConfigured = MODEL_AUTH_MODE !== "locked";
   const heartbeatArmed = HEARTBEAT_ENABLED && Boolean(RUNNER_SECRET) && Boolean(SERVICE_ROLE_KEY);
@@ -142,6 +144,14 @@ async function handleStatus(request) {
       message: modelConfigured
         ? "Apollo can use the server model path for chat responses."
         : "Apollo will keep using deterministic context-pack answers until an OpenAI key, AI Gateway key, or Vercel OIDC token is available server-side.",
+      // 13M-1: today's token usage + daily budget so Operations Status can
+      // show "tokens today: X / Y" and flip grounded when exhausted.
+      tokens: {
+        usedToday: tokens.used,
+        dailyBudget: tokens.budget,
+        remaining: tokens.remaining,
+        exhausted: tokens.exhausted,
+      },
     },
     heartbeat: {
       armed: heartbeatArmed,

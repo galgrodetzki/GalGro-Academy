@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { buildApolloContextPacks } from "./contextPacks.js";
+import { getBudgetStatus, recordTokenUsage } from "./_tokens.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL
   ?? process.env.VITE_SUPABASE_URL
@@ -161,7 +162,7 @@ function buildModelPrompt({ message, context, actor }) {
   ].join("\n\n");
 }
 
-async function buildApolloReply({ message, context, actor }) {
+async function buildApolloReply({ message, context, actor, supabase }) {
   const fallback = buildGroundedReply(message, context);
 
   if (!MODEL_ACCESS_CONFIGURED) {
@@ -170,11 +171,28 @@ async function buildApolloReply({ message, context, actor }) {
       model: null,
       reply: fallback,
       modelStatus: "No model auth is configured, so Apollo answered from deterministic context packs.",
+      usage: null,
+      budget: null,
+    };
+  }
+
+  // 13M-1: check the daily token budget BEFORE calling the model. If today's
+  // usage already crossed the budget, fall back to grounded mode. The read is
+  // best-effort — if it errors we still call the model (fail open).
+  const budget = await getBudgetStatus(supabase);
+  if (budget.exhausted) {
+    return {
+      mode: "grounded_budget_exhausted",
+      model: APOLLO_MODEL,
+      reply: fallback,
+      modelStatus: `Daily token budget (${budget.budget}) reached; Apollo served a grounded reply. Resets at UTC midnight.`,
+      usage: null,
+      budget,
     };
   }
 
   try {
-    const { text } = await generateText({
+    const { text, usage } = await generateText({
       model: openai(APOLLO_MODEL),
       system: [
         "You are Apollo, the command layer for GalGro's Academy.",
@@ -186,11 +204,27 @@ async function buildApolloReply({ message, context, actor }) {
       prompt: buildModelPrompt({ message, context, actor }),
     });
 
+    // 13M-1: record usage immediately after a successful call. Swallow write
+    // errors — we'd rather serve the reply than fail chat on an accounting
+    // blip. A warning in the logs is enough to diagnose later.
+    if (usage) {
+      const record = await recordTokenUsage(supabase, { model: APOLLO_MODEL, usage });
+      if (!record.ok) {
+        console.warn("Apollo token usage record failed", record.error);
+      }
+    }
+
     return {
       mode: "model",
       model: APOLLO_MODEL,
       reply: text.trim() || fallback,
       modelStatus: "Model response generated through the server-side Apollo chat endpoint.",
+      usage: usage ? {
+        promptTokens: usage.promptTokens ?? 0,
+        completionTokens: usage.completionTokens ?? 0,
+        totalTokens: usage.totalTokens ?? 0,
+      } : null,
+      budget,
     };
   } catch (error) {
     console.error("Apollo model call failed", error);
@@ -199,6 +233,8 @@ async function buildApolloReply({ message, context, actor }) {
       model: APOLLO_MODEL,
       reply: fallback,
       modelStatus: "Model call failed safely, so Apollo answered from deterministic context packs.",
+      usage: null,
+      budget,
     };
   }
 }
@@ -269,7 +305,7 @@ async function handleChat(request) {
   }
 
   const context = await buildApolloContextPacks({ supabase: auth.supabase, actor: auth.actor });
-  const answer = await buildApolloReply({ message, context, actor: auth.actor });
+  const answer = await buildApolloReply({ message, context, actor: auth.actor, supabase: auth.supabase });
   const audit = await recordChatAudit({
     supabase: auth.supabase,
     actor: auth.actor,
@@ -286,6 +322,10 @@ async function handleChat(request) {
     mode: answer.mode,
     model: answer.model,
     modelStatus: answer.modelStatus,
+    // 13M-1: per-call usage + today's budget snapshot so the UI can warn the
+    // head coach as they approach the ceiling.
+    usage: answer.usage,
+    budget: answer.budget,
     audit,
     context: {
       version: context.version,

@@ -186,6 +186,40 @@ export default function ApolloOperationsStatus() {
                 <InfoRow label="auth" value={model.authMode} tone={model.configured ? "ready" : "warn"} />
                 <InfoRow label="model" value={model.model} />
                 <InfoRow label="mode" value={model.mode} tone={model.configured ? "ready" : "neutral"} />
+
+                {/* 13M-1: today's tokens vs the optional daily budget. "unlimited"
+                    shows up when APOLLO_DAILY_TOKEN_BUDGET is unset. */}
+                {model.tokens && (
+                  <div className="mt-4 pt-3 border-t border-bg-border/50">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-white/30 mb-2">
+                      Tokens today
+                    </div>
+                    <InfoRow
+                      label="used"
+                      value={(model.tokens.usedToday ?? 0).toLocaleString()}
+                      tone={model.tokens.exhausted ? "warn" : "neutral"}
+                    />
+                    <InfoRow
+                      label="budget"
+                      value={model.tokens.dailyBudget == null
+                        ? "unlimited"
+                        : model.tokens.dailyBudget.toLocaleString()}
+                      tone={model.tokens.dailyBudget == null ? "neutral" : "ready"}
+                    />
+                    {model.tokens.dailyBudget != null && (
+                      <InfoRow
+                        label="remaining"
+                        value={(model.tokens.remaining ?? 0).toLocaleString()}
+                        tone={model.tokens.exhausted ? "warn" : "ready"}
+                      />
+                    )}
+                    {model.tokens.exhausted && (
+                      <div className="mt-2 text-[10px] text-warning">
+                        Budget reached — chat is in grounded mode until UTC midnight.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-xs text-white/40">Not loaded</div>
