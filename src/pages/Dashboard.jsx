@@ -21,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
+import MentorFeed from "../components/MentorFeed";
 import { DRILLS, CATEGORIES } from "../data/drills";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
@@ -289,6 +290,12 @@ export default function Dashboard({ setPage }) {
           </>
         )}
       </Motion.div>
+
+      {/* Mentor-C3: keeper-facing Mentor messages. RLS keeps this
+          self-scoped — keepers see their own feed, the coach sees
+          theirs (none, typically). Hidden entirely when there are no
+          messages yet. */}
+      <MentorFeed className="mb-6" />
 
       {/* Mentor-A4: Today & upcoming panel — surfaces the next training
           session and game day so the team doesn't have to open the

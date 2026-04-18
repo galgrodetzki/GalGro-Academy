@@ -3,7 +3,10 @@ import {
   BookOpenCheck,
   Edit3,
   Plus,
+  Play,
+  RefreshCcw,
   Save,
+  Send,
   ToggleLeft,
   ToggleRight,
   Trash2,
@@ -18,6 +21,10 @@ import {
   setMentorTemplateEnabled,
   updateMentorTemplate,
 } from "../lib/mentorTemplates";
+import {
+  fetchMyMentorMessages,
+  runMentorGenerator,
+} from "../lib/mentorMessages";
 
 // Mentor-B2: template authoring panel for the head coach.
 // Lives under the Admin "Mentor" tab. CRUD over `mentor_templates`. Templates
@@ -49,6 +56,44 @@ export default function MentorTemplatesPanel({ isCoach, onToast }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [activity, setActivity] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  const reloadActivity = useCallback(async () => {
+    setActivityLoading(true);
+    try {
+      // Coach passes no keeperProfileId → RLS policy lets head coach read all rows.
+      const rows = await fetchMyMentorMessages({ limit: 20 });
+      setActivity(rows);
+    } catch (err) {
+      // Non-fatal — coach can still manage templates.
+      onToast?.(err?.message || "Could not load Mentor activity.");
+    } finally {
+      setActivityLoading(false);
+    }
+  }, [onToast]);
+
+  const handleGenerateNow = async () => {
+    if (!isCoach) return;
+    setGenerating(true);
+    try {
+      const report = await runMentorGenerator();
+      const createdCount = Array.isArray(report?.created) ? report.created.length : 0;
+      const skippedCount = Array.isArray(report?.skipped) ? report.skipped.length : 0;
+      const errorCount = Array.isArray(report?.errors) ? report.errors.length : 0;
+      onToast?.(
+        errorCount > 0
+          ? `Generated ${createdCount} new, ${skippedCount} dupes, ${errorCount} errors.`
+          : `Generated ${createdCount} new, ${skippedCount} dupes.`
+      );
+      await reloadActivity();
+    } catch (err) {
+      onToast?.(err?.message || "Could not run generator.");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const reload = useCallback(async () => {
     try {
@@ -64,7 +109,8 @@ export default function MentorTemplatesPanel({ isCoach, onToast }) {
 
   useEffect(() => {
     reload();
-  }, [reload]);
+    reloadActivity();
+  }, [reload, reloadActivity]);
 
   const grouped = useMemo(() => {
     const byTrigger = new Map();
@@ -163,6 +209,81 @@ export default function MentorTemplatesPanel({ isCoach, onToast }) {
             <code className="text-accent bg-bg-soft px-1 rounded">{"{{placeholders}}"}</code> for keeper-specific details. The daily generator substitutes them when it writes each keeper's message.
           </p>
         </div>
+      </div>
+
+      {/* Generator + recent activity (Mentor-C) */}
+      <div className="card p-4 mb-5 border border-bg-border">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <Send size={14} className="text-accent" />
+            <span className="text-sm font-bold">Daily generator</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={reloadActivity}
+              disabled={activityLoading}
+              className="text-[11px] text-white/50 hover:text-white transition-colors flex items-center gap-1 disabled:opacity-40"
+              title="Refresh activity"
+            >
+              <RefreshCcw size={11} className={activityLoading ? "animate-spin" : ""} />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerateNow}
+              disabled={generating || !isCoach}
+              className="px-3 py-1.5 rounded-lg bg-accent text-black text-[11px] font-bold flex items-center gap-1.5 disabled:opacity-40"
+            >
+              <Play size={11} />
+              {generating ? "Generating…" : "Generate now"}
+            </button>
+          </div>
+        </div>
+        <p className="text-[11px] text-white/50 leading-relaxed mb-3">
+          Runs daily at 06:00 UTC. Writes a personalized message per keeper for every enabled template that matches today's training sessions or today/tomorrow's games. The unique constraint makes re-runs safe — duplicates are skipped.
+        </p>
+
+        {activity.length === 0 ? (
+          <div className="text-[11px] text-white/40">
+            No Mentor messages generated yet. Add a template and hit Generate now, or wait for the daily run.
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-h-60 overflow-auto">
+            {activity.slice(0, 10).map((m) => (
+              <div
+                key={m.id}
+                className="flex items-center gap-2 text-[11px] bg-bg-soft/70 rounded-md px-2 py-1.5 border border-bg-border"
+              >
+                <span className="text-white/30 font-mono text-[10px]">
+                  {m.triggerDate}
+                </span>
+                <span className="text-accent/80 font-bold">
+                  {m.triggerType.replace(/_/g, " ")}
+                </span>
+                <span className="text-white/70 truncate flex-1" title={m.body}>
+                  {m.title}
+                </span>
+                <span
+                  className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                    m.status === "unread"
+                      ? "text-accent bg-accent/10"
+                      : m.status === "read"
+                        ? "text-white/40 bg-bg-soft"
+                        : "text-white/30 bg-bg-soft"
+                  }`}
+                >
+                  {m.status}
+                </span>
+              </div>
+            ))}
+            {activity.length > 10 && (
+              <div className="text-[10px] text-white/30 text-center pt-1">
+                {activity.length - 10} more…
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Placeholder reference */}
