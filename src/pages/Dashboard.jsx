@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import MentorFeed from "../components/MentorFeed";
+import MentorPushToggle from "../components/MentorPushToggle";
 import { DRILLS, CATEGORIES } from "../data/drills";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
@@ -290,6 +291,10 @@ export default function Dashboard({ setPage }) {
           </>
         )}
       </Motion.div>
+
+      {/* Mentor-D: Push opt-in. Renders as a no-op when push isn't
+          configured server-side or unsupported in the browser. */}
+      {isKeeper && <MentorPushToggle className="mb-4" />}
 
       {/* Mentor-C3: keeper-facing Mentor messages. RLS keeps this
           self-scoped — keepers see their own feed, the coach sees

@@ -21,6 +21,7 @@
 //     makes re-runs no-ops.
 
 import { createClient } from "@supabase/supabase-js";
+import { isPushConfigured, sendPush } from "./_push.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL
   ?? process.env.VITE_SUPABASE_URL
@@ -236,10 +237,71 @@ async function insertMessage(client, payload) {
   return { ok: true, id: data.id };
 }
 
+// Fan-out a push to every subscription the keeper has registered.
+// Non-fatal: any subscription error is logged into push_subscriptions but
+// doesn't break the generator run.
+async function pushToKeeper({ client, keeperProfileId, payload, pushStats }) {
+  if (!isPushConfigured()) return;
+  const { data: subs, error } = await client
+    .from("push_subscriptions")
+    .select("id,endpoint,p256dh,auth")
+    .eq("profile_id", keeperProfileId);
+  if (error || !Array.isArray(subs) || subs.length === 0) {
+    pushStats.noSubscription += 1;
+    return;
+  }
+  for (const sub of subs) {
+    const result = await sendPush(sub, payload);
+    if (result.ok) {
+      pushStats.delivered += 1;
+      await client
+        .from("push_subscriptions")
+        .update({ last_success_at: new Date().toISOString(), last_error: null })
+        .eq("id", sub.id);
+    } else if (result.shouldPrune) {
+      pushStats.pruned += 1;
+      await client.from("push_subscriptions").delete().eq("id", sub.id);
+    } else {
+      pushStats.failed += 1;
+      await client
+        .from("push_subscriptions")
+        .update({
+          last_error: String(result.error || "push_failed").slice(0, 500),
+          last_error_at: new Date().toISOString(),
+        })
+        .eq("id", sub.id);
+    }
+  }
+}
+
 async function generateForWindow({ client, templatesByTrigger, keepers, players, today, tomorrow }) {
   const created = [];
   const skipped = [];
   const errors = [];
+  const pushStats = { delivered: 0, failed: 0, pruned: 0, noSubscription: 0 };
+
+  // Fire a push for a freshly-created mentor_message. Non-blocking on any
+  // single failure — one dead subscription mustn't stop the rest.
+  const pushForMessage = async ({ keeper, triggerType, tpl, title, body }) => {
+    const pushPayload = {
+      title,
+      body: body.length > 240 ? `${body.slice(0, 237)}…` : body,
+      url: "/",
+      tag: `mentor-${keeper.id}-${triggerType}`,
+      triggerType,
+    };
+    try {
+      await pushToKeeper({
+        client,
+        keeperProfileId: keeper.id,
+        payload: pushPayload,
+        pushStats,
+      });
+    } catch (err) {
+      // Swallow — already logged per-subscription inside pushToKeeper.
+      console.warn("Mentor push fanout failed", { keeper: keeper.id, template: tpl?.id, err: err?.message });
+    }
+  };
 
   const keeperById = new Map(keepers.map((k) => [k.id, k]));
   // Player → profile lookups so session.player_ids (player ids) resolve to a
@@ -283,6 +345,7 @@ async function generateForWindow({ client, templatesByTrigger, keepers, players,
           });
           if (result.ok) {
             created.push({ keeper: keeper.name, trigger: "training_day", template: tpl.title });
+            await pushForMessage({ keeper, triggerType: "training_day", tpl, title, body });
           } else if (result.kind === "duplicate") {
             skipped.push({ keeper: keeper.name, trigger: "training_day", template: tpl.title });
           } else {
@@ -317,9 +380,20 @@ async function generateForWindow({ client, templatesByTrigger, keepers, players,
             generated_body: substitute(tpl.body, vars),
             metadata: { opponent: game.opponent },
           });
-          if (result.ok) created.push({ keeper: keeper.name, trigger: "game_day", template: tpl.title });
-          else if (result.kind === "duplicate") skipped.push({ keeper: keeper.name, trigger: "game_day", template: tpl.title });
-          else errors.push({ keeper: keeper.name, trigger: "game_day", template: tpl.title, error: result.kind });
+          if (result.ok) {
+            created.push({ keeper: keeper.name, trigger: "game_day", template: tpl.title });
+            await pushForMessage({
+              keeper,
+              triggerType: "game_day",
+              tpl,
+              title: substitute(tpl.title, vars),
+              body: substitute(tpl.body, vars),
+            });
+          } else if (result.kind === "duplicate") {
+            skipped.push({ keeper: keeper.name, trigger: "game_day", template: tpl.title });
+          } else {
+            errors.push({ keeper: keeper.name, trigger: "game_day", template: tpl.title, error: result.kind });
+          }
         }
       }
     }
@@ -349,15 +423,26 @@ async function generateForWindow({ client, templatesByTrigger, keepers, players,
             generated_body: substitute(tpl.body, vars),
             metadata: { opponent: game.opponent, game_date: game.game_date },
           });
-          if (result.ok) created.push({ keeper: keeper.name, trigger: "game_day_eve", template: tpl.title });
-          else if (result.kind === "duplicate") skipped.push({ keeper: keeper.name, trigger: "game_day_eve", template: tpl.title });
-          else errors.push({ keeper: keeper.name, trigger: "game_day_eve", template: tpl.title, error: result.kind });
+          if (result.ok) {
+            created.push({ keeper: keeper.name, trigger: "game_day_eve", template: tpl.title });
+            await pushForMessage({
+              keeper,
+              triggerType: "game_day_eve",
+              tpl,
+              title: substitute(tpl.title, vars),
+              body: substitute(tpl.body, vars),
+            });
+          } else if (result.kind === "duplicate") {
+            skipped.push({ keeper: keeper.name, trigger: "game_day_eve", template: tpl.title });
+          } else {
+            errors.push({ keeper: keeper.name, trigger: "game_day_eve", template: tpl.title, error: result.kind });
+          }
         }
       }
     }
   }
 
-  return { created, skipped, errors };
+  return { created, skipped, errors, pushStats };
 }
 
 export default async function handler(request) {
@@ -414,7 +499,9 @@ export default async function handler(request) {
       created: result.created,
       skipped: result.skipped,
       errors: result.errors,
-      summary: `${result.created.length} created, ${result.skipped.length} duplicates, ${result.errors.length} errors`,
+      pushStats: result.pushStats,
+      pushConfigured: isPushConfigured(),
+      summary: `${result.created.length} created, ${result.skipped.length} duplicates, ${result.errors.length} errors; push ${result.pushStats.delivered} delivered, ${result.pushStats.failed} failed, ${result.pushStats.pruned} pruned`,
     });
   } catch (err) {
     return json({ error: err?.message || "Mentor generator failed." }, 500);
