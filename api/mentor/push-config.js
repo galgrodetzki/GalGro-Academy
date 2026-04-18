@@ -2,7 +2,7 @@
 // Safe to expose; this is the counterpart to the server-only private key.
 // Also reports whether push is configured so the UI can show the right state.
 
-import { getVapidPublicKey, isPushConfigured } from "./_push.js";
+import { getVapidConfigError, getVapidPublicKey, isPushConfigured } from "./_push.js";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -25,6 +25,9 @@ export default {
       JSON.stringify({
         configured,
         publicKey: configured ? getVapidPublicKey() : null,
+        // Diagnostic for setup only — empty string when configured. Safe to
+        // expose; no key material leaks, just length + error message.
+        configError: configured ? null : getVapidConfigError(),
       }),
       { status: 200, headers: JSON_HEADERS }
     );

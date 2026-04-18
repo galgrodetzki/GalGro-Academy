@@ -10,18 +10,34 @@
 
 import webpush from "web-push";
 
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY ?? "";
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY ?? "";
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT ?? "mailto:galgrodetzki@gmail.com";
+// Trim whitespace because pasted env-var values often include trailing
+// newlines / spaces that make web-push reject otherwise-valid keys.
+const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY ?? "").trim();
+const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY ?? "").trim();
+const VAPID_SUBJECT = (process.env.VAPID_SUBJECT ?? "mailto:galgrodetzki@gmail.com").trim();
 
 let vapidConfigured = false;
+let vapidConfigError = null;
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   try {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
     vapidConfigured = true;
   } catch (err) {
-    console.warn("Mentor push: invalid VAPID keys", err?.message);
+    vapidConfigError = err?.message || String(err);
+    // Enriched log: without this we only see "invalid VAPID" with no detail on
+    // which key failed or what length was received.
+    console.warn(
+      "Mentor push: invalid VAPID keys — "
+      + `publicLen=${VAPID_PUBLIC_KEY.length} privateLen=${VAPID_PRIVATE_KEY.length} `
+      + `subject=${VAPID_SUBJECT} error=${vapidConfigError}`
+    );
   }
+} else {
+  vapidConfigError = `missing key(s): public=${Boolean(VAPID_PUBLIC_KEY)} private=${Boolean(VAPID_PRIVATE_KEY)}`;
+}
+
+export function getVapidConfigError() {
+  return vapidConfigError;
 }
 
 export function isPushConfigured() {
