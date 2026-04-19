@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import CategoryIcon from "../components/CategoryIcon";
+import TacticalField from "../components/ui/TacticalField";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useSession } from "../hooks/useSession";
 import { useData } from "../context/DataContext";
@@ -231,7 +232,7 @@ export default function SessionBuilder() {
     new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   return (
-    <div>
+    <div className="space-y-5">
       <PageHeader
         title="Session Builder"
         subtitle="Tap + on a drill to add it — or drag on desktop"
@@ -253,19 +254,19 @@ export default function SessionBuilder() {
       </PageHeader>
 
       {/* Mobile-only tab switcher */}
-      <div className="lg:hidden flex bg-bg-soft border border-bg-border rounded-xl p-1 mb-3">
+      <div className="tab-rail lg:hidden">
         <button
           onClick={() => setMobileTab("library")}
-          className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${
-            mobileTab === "library" ? "bg-accent text-black" : "text-white/60"
+          className={`tab-button ${
+            mobileTab === "library" ? "tab-button-active" : "tab-button-idle"
           }`}
         >
           Drill Library
         </button>
         <button
           onClick={() => setMobileTab("session")}
-          className={`relative flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${
-            mobileTab === "session" ? "bg-accent text-black" : "text-white/60"
+          className={`tab-button relative ${
+            mobileTab === "session" ? "tab-button-active" : "tab-button-idle"
           }`}
         >
           Session
@@ -279,15 +280,30 @@ export default function SessionBuilder() {
         </button>
       </div>
 
+      <BuilderCockpit
+        session={session}
+        filteredCount={filtered.length}
+        totalDrills={allDrills.length}
+        totalDuration={totalDuration}
+        progress={progress}
+        overTarget={overTarget}
+      />
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.1fr]">
           {/* LEFT: Library */}
-          <div className={`card p-3 md:p-4 flex flex-col lg:max-h-[calc(100vh-180px)] ${mobileTab === "library" ? "flex" : "hidden lg:flex"}`}>
+          <div className={`workspace-panel flex flex-col p-3 lg:max-h-[calc(100vh-220px)] ${mobileTab === "library" ? "flex" : "hidden lg:flex"}`}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="quiet-label">Drill database</div>
+                <div className="mt-1 text-xs text-white/45">{filtered.length} drills match the current filters.</div>
+              </div>
+            </div>
             <div className="flex items-center gap-2 mb-3">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={14} />
@@ -309,7 +325,7 @@ export default function SessionBuilder() {
               </select>
             </div>
 
-            <div className="flex flex-nowrap md:flex-wrap gap-1.5 mb-3 pb-3 border-b border-bg-border overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
+            <div className="flex flex-nowrap md:flex-wrap gap-1.5 mb-3 pb-3 border-b border-white/[0.07] overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
               <Chip active={cat === "all"} onClick={() => setCat("all")}>All ({allDrills.length})</Chip>
               {CATEGORIES.map((c) => {
                 const count = allDrills.filter((d) => d.cat === c.key).length;
@@ -338,8 +354,15 @@ export default function SessionBuilder() {
           </div>
 
           {/* RIGHT: Session */}
-          <div className={`card p-3 md:p-4 flex flex-col lg:max-h-[calc(100vh-180px)] ${mobileTab === "session" ? "flex" : "hidden lg:flex"}`}>
+          <div className={`workspace-panel flex flex-col p-3 lg:max-h-[calc(100vh-220px)] ${mobileTab === "session" ? "flex" : "hidden lg:flex"}`}>
             <div className="mb-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="quiet-label">Session timeline</div>
+                  <div className="mt-1 text-xs text-white/45">Order, load, rest, and drill notes.</div>
+                </div>
+                <span className={`chip ${overTarget ? "chip-danger" : "chip-success"}`}>{Math.round(progress)}%</span>
+              </div>
               <input
                 type="text"
                 value={session.name}
@@ -357,7 +380,7 @@ export default function SessionBuilder() {
                 />
                 <span className="font-display text-sm font-bold text-accent w-16 text-right">{session.target} min</span>
               </div>
-              <div className="relative h-2 bg-bg-soft rounded-full overflow-hidden">
+              <div className="relative h-2 bg-black/25 rounded-full overflow-hidden">
                 <div
                   className={`absolute inset-y-0 left-0 transition-all ${overTarget ? "bg-red-500" : progress >= 90 ? "bg-accent" : "bg-accent/70"}`}
                   style={{ width: `${progress}%` }}
@@ -373,7 +396,7 @@ export default function SessionBuilder() {
 
             <SessionDropZone>
               {session.blocks.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center border-2 border-dashed border-bg-border rounded-xl p-8 text-center">
+                <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed border-white/[0.12] bg-black/[0.1] p-8 text-center">
                   <div>
                     <Plus className="mx-auto mb-2 text-white/30" size={32} />
                     <p className="text-sm text-white/50 font-semibold">Drag drills here</p>
@@ -402,13 +425,13 @@ export default function SessionBuilder() {
 
         <DragOverlay>
           {activeDrag?.type === "library-drill" && (
-            <div className="card p-3 shadow-glow border-accent">
+            <div className="modal-card rounded-lg p-3 border-accent">
               <div className="font-semibold text-sm text-accent">{activeDrag.drill.name}</div>
               <div className="text-xs text-white/50">{activeDrag.drill.dur} min</div>
             </div>
           )}
           {activeDrag?.type === "session-block" && (
-            <div className="card p-3 shadow-glow border-accent opacity-90">
+            <div className="modal-card rounded-lg p-3 border-accent opacity-90">
               <div className="font-semibold text-sm">{allDrills.find((d) => d.id === activeDrag.block.drillId)?.name}</div>
             </div>
           )}
@@ -471,7 +494,7 @@ export default function SessionBuilder() {
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                 {templates.map((t) => (
-                  <div key={t.id} className="card p-3 flex items-center gap-3">
+                  <div key={t.id} className="data-row p-3 flex items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-sm truncate">{t.name}</div>
                       <div className="text-xs text-white/40 mt-0.5">
@@ -532,7 +555,7 @@ export default function SessionBuilder() {
                     className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-semibold transition-all ${
                       saveStatus === "planned"
                         ? "border-accent bg-accent/10 text-accent"
-                        : "border-bg-border text-white/50 hover:border-white/30"
+                        : "border-white/[0.09] text-white/50 hover:border-white/30"
                     }`}
                   >
                     <CalendarDays size={15} /> Upcoming
@@ -542,7 +565,7 @@ export default function SessionBuilder() {
                     className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-semibold transition-all ${
                       saveStatus === "completed"
                         ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
-                        : "border-bg-border text-white/50 hover:border-white/30"
+                        : "border-white/[0.09] text-white/50 hover:border-white/30"
                     }`}
                   >
                     <CheckCircle2 size={15} /> Completed
@@ -563,7 +586,7 @@ export default function SessionBuilder() {
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all ${
                             selected
                               ? "border-accent bg-accent/10 text-accent"
-                              : "border-bg-border text-white/50 hover:border-white/30 hover:text-white"
+                              : "border-white/[0.09] text-white/50 hover:border-white/30 hover:text-white"
                           }`}
                         >
                           <span className="w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-black bg-white/10">
@@ -593,10 +616,83 @@ export default function SessionBuilder() {
       </AnimatePresence>
 
       {toast && (
-        <div className="fixed left-4 right-4 md:left-auto md:right-6 bottom-20 md:bottom-6 z-[45] card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold text-center md:text-left">
+        <div className="toast-panel">
           {toast}
         </div>
       )}
+    </div>
+  );
+}
+
+function BuilderCockpit({ session, filteredCount, totalDrills, totalDuration, progress, overTarget }) {
+  const remaining = session.target - totalDuration;
+  const planState = session.blocks.length === 0
+    ? "Empty"
+    : overTarget
+      ? "Over target"
+      : progress >= 90
+        ? "Ready range"
+        : "Building";
+
+  return (
+    <section className="workspace-panel grid grid-cols-1 gap-3 p-3 md:p-4 xl:grid-cols-[1.1fr_0.9fr] xl:items-start">
+      <div className="space-y-2 xl:self-start">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <CockpitMetric
+            label="Plan state"
+            value={planState}
+            detail={`${session.blocks.length} drill${session.blocks.length === 1 ? "" : "s"} selected`}
+            tone={overTarget ? "danger" : progress >= 90 ? "success" : "neutral"}
+          />
+          <CockpitMetric
+            label="Duration"
+            value={`${totalDuration}m`}
+            detail={remaining >= 0 ? `${remaining}m remaining` : `${Math.abs(remaining)}m over target`}
+            tone={overTarget ? "danger" : "success"}
+          />
+          <CockpitMetric
+            label="Target"
+            value={`${session.target}m`}
+            detail="Coach load"
+            tone="info"
+          />
+          <CockpitMetric
+            label="Library"
+            value={filteredCount}
+            detail={`${totalDrills} total drills`}
+            tone="neutral"
+          />
+        </div>
+        <div className="inspector-panel hidden p-4 md:block">
+          <div className="quiet-label">Planning discipline</div>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/48">
+            Build the session as a timeline: warm-up, main load, recovery windows, then save or export once the minutes match the target.
+          </p>
+        </div>
+      </div>
+      <TacticalField
+        title="Session blueprint"
+        subtitle={session.blocks.length ? `${session.name} · ${Math.round(progress)}% loaded` : "Drag drills into the plan"}
+        mode="builder"
+        className="hidden min-h-[210px] xl:block"
+      />
+    </section>
+  );
+}
+
+function CockpitMetric({ label, value, detail, tone = "neutral" }) {
+  const toneClass = {
+    success: "text-accent",
+    info: "text-electric",
+    danger: "text-red-300",
+    neutral: "text-white",
+  }[tone];
+
+  return (
+    <div className="inspector-panel p-3">
+      <div className="quiet-label">{label}</div>
+      <div className={`mt-2 font-display text-xl font-bold md:text-2xl ${toneClass}`}>{value}</div>
+      <div className="mt-1 truncate text-[11px] text-white/40">{detail}</div>
     </div>
   );
 }
@@ -606,12 +702,12 @@ function Modal({ title, onClose, children }) {
   useScrollLock(true);
   return (
     <Motion.div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end sm:items-center justify-center sm:p-4"
+      className="fixed inset-0 bg-black/72 backdrop-blur-md z-[55] flex items-end sm:items-center justify-center sm:p-4"
       onClick={onClose}
       {...modalBackdropMotion}
     >
       <Motion.div
-        className="card w-full sm:max-w-md p-5 sm:p-6 rounded-t-2xl sm:rounded-xl max-h-[92vh] overflow-y-auto pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-6"
+        className="modal-card w-full sm:max-w-md p-5 sm:p-6 rounded-t-2xl sm:rounded-lg max-h-[92vh] overflow-y-auto pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-6"
         onClick={(e) => e.stopPropagation()}
         {...modalPanelMotion}
       >
@@ -629,8 +725,8 @@ function Chip({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
-        active ? "bg-accent text-black" : "bg-bg-card2 text-white/60 hover:text-white border border-bg-border"
+      className={`filter-chip px-2.5 py-1 text-[11px] ${
+        active ? "filter-chip-active" : "filter-chip-idle"
       }`}
     >
       {children}
@@ -649,13 +745,13 @@ function LibraryDrillCard({ drill, onAdd, onPreview }) {
   return (
     <Motion.div
       whileHover={isDragging ? undefined : drillCardHover}
-      className={`card card-hover group flex items-stretch ${isDragging ? "opacity-40" : ""}`}
+      className={`metric-card group flex items-stretch ${isDragging ? "opacity-40" : ""}`}
     >
       <div
         ref={setNodeRef}
         {...attributes}
         {...listeners}
-        className="px-2 flex items-center text-white/20 hover:text-accent cursor-grab active:cursor-grabbing border-r border-bg-border"
+        className="px-2 flex items-center text-white/22 hover:text-accent cursor-grab active:cursor-grabbing border-r border-white/[0.07]"
         title="Drag to session"
       >
         <GripVertical size={14} />
@@ -673,7 +769,7 @@ function LibraryDrillCard({ drill, onAdd, onPreview }) {
       </button>
       <button
         onClick={(e) => { e.stopPropagation(); onAdd(); }}
-        className="w-10 flex items-center justify-center text-accent hover:bg-accent hover:text-black transition-all border-l border-bg-border rounded-r-xl"
+        className="w-10 flex items-center justify-center text-accent hover:bg-accent hover:text-black transition-all border-l border-white/[0.07] rounded-r-lg"
         title="Add to session"
       >
         <Plus size={16} />
@@ -688,7 +784,7 @@ function SessionDropZone({ children }) {
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 flex flex-col min-h-0 transition-colors rounded-xl ${isOver ? "bg-accent/5" : ""}`}
+      className={`flex-1 flex flex-col min-h-0 transition-colors rounded-lg ${isOver ? "bg-accent/5" : ""}`}
     >
       {children}
     </div>
@@ -708,12 +804,12 @@ function SessionBlock({ block, index, drills, onUpdate, onRemove }) {
   const info = catById(drill.cat);
 
   return (
-    <div ref={setNodeRef} style={style} className={`card ${isDragging ? "opacity-40 z-50" : ""}`}>
+    <div ref={setNodeRef} style={style} className={`data-row ${isDragging ? "opacity-40 z-50" : ""}`}>
       <div className="flex items-stretch">
         <button
           {...attributes}
           {...listeners}
-          className="px-2 flex items-center text-white/30 hover:text-accent cursor-grab active:cursor-grabbing border-r border-bg-border"
+          className="px-2 flex items-center text-white/30 hover:text-accent cursor-grab active:cursor-grabbing border-r border-white/[0.07]"
         >
           <GripVertical size={16} />
         </button>
@@ -726,7 +822,7 @@ function SessionBlock({ block, index, drills, onUpdate, onRemove }) {
           </div>
           <div className="font-semibold text-sm mb-2 truncate">{drill.name}</div>
           <div className="flex items-center gap-2 text-xs">
-            <div className="flex items-center gap-1 bg-bg-soft rounded px-2 py-1">
+            <div className="flex items-center gap-1 rounded bg-black/[0.16] px-2 py-1">
               <Clock size={11} className="text-accent" />
               <input
                 type="number" min="1" max="60" value={block.dur}
@@ -735,7 +831,7 @@ function SessionBlock({ block, index, drills, onUpdate, onRemove }) {
               />
               <span className="text-white/40">min</span>
             </div>
-            <div className="flex items-center gap-1 bg-bg-soft rounded px-2 py-1">
+            <div className="flex items-center gap-1 rounded bg-black/[0.16] px-2 py-1">
               <Coffee size={11} className="text-white/50" />
               <input
                 type="number" min="0" max="10" value={block.rest}
@@ -747,7 +843,7 @@ function SessionBlock({ block, index, drills, onUpdate, onRemove }) {
             <button
               onClick={() => setExpanded((x) => !x)}
               className={`ml-auto w-7 h-7 rounded-lg border hover:border-accent/40 hover:text-accent flex items-center justify-center transition-all ${
-                block.notes ? "text-accent border-accent/40" : "text-white/50 border-bg-border"
+                block.notes ? "text-accent border-accent/40" : "text-white/50 border-white/[0.09]"
               }`}
               title="Notes"
             >
@@ -755,7 +851,7 @@ function SessionBlock({ block, index, drills, onUpdate, onRemove }) {
             </button>
             <button
               onClick={() => onRemove(block.blockId)}
-              className="w-7 h-7 rounded-lg border border-bg-border hover:border-red-500/40 hover:text-red-400 text-white/50 flex items-center justify-center transition-all"
+              className="w-7 h-7 rounded-lg border border-white/[0.09] hover:border-red-500/40 hover:text-red-400 text-white/50 flex items-center justify-center transition-all"
             >
               <Trash2 size={12} />
             </button>
@@ -780,12 +876,12 @@ function DrillPreviewModal({ drill, onClose, onAdd }) {
   const info = catById(drill.cat);
   return (
     <Motion.div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
+      className="fixed inset-0 bg-black/72 backdrop-blur-md z-[55] flex items-end md:items-center justify-center md:p-4"
       onClick={onClose}
       {...modalBackdropMotion}
     >
       <Motion.div
-        className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
+        className="modal-card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-lg pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
         onClick={(e) => e.stopPropagation()}
         {...modalPanelMotion}
       >
@@ -796,7 +892,7 @@ function DrillPreviewModal({ drill, onClose, onAdd }) {
           <h2 className="font-display text-2xl font-bold">{drill.name}</h2>
           <span className={`tag border ${INT_COLORS[drill.int]} shrink-0`}>{drill.int}</span>
         </div>
-        <div className="flex items-center gap-4 text-xs text-white/60 mb-6 pb-4 border-b border-bg-border">
+        <div className="flex items-center gap-4 text-xs text-white/60 mb-6 pb-4 border-b border-white/[0.07]">
           <span className="flex items-center gap-1.5"><Clock size={13} className="text-accent" /> {drill.dur} min</span>
           <span className="flex items-center gap-1.5"><Zap size={13} className="text-electric" /> {drill.reps}</span>
           {drill.eq?.length > 0 && (

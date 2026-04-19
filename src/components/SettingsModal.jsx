@@ -38,14 +38,14 @@ export default function SettingsModal({ open, onClose }) {
     <AnimatePresence>
       {open && (
         <Motion.div
-          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-black/72 backdrop-blur-md"
           {...modalBackdropMotion}
         >
           <Motion.div
-            className="bg-bg-soft border border-bg-border w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl pb-[env(safe-area-inset-bottom)]"
+            className="modal-card w-full sm:max-w-md sm:rounded-lg rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
             {...modalPanelMotion}
           >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-bg-border">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07]">
           <h2 className="text-lg font-display font-bold">Settings</h2>
           <button onClick={onClose} className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-bg-card transition-colors">
             <X size={18} />
@@ -67,7 +67,7 @@ export default function SettingsModal({ open, onClose }) {
               value={draft.coachName}
               onChange={(e) => setDraft((d) => ({ ...d, coachName: e.target.value }))}
               placeholder="Your name"
-              className="w-full bg-bg-card border border-bg-border rounded-lg px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-accent/50 transition-colors"
+              className="input py-3"
             />
           </div>
           <div>
@@ -86,14 +86,14 @@ export default function SettingsModal({ open, onClose }) {
           </div>
         </div>
 
-        <div className="flex gap-3 px-6 py-4 border-t border-bg-border">
-          <button onClick={onClose} className="flex-1 py-3 rounded-lg border border-bg-border text-sm text-white/60 hover:text-white hover:bg-bg-card transition-colors">
+        <div className="flex gap-3 px-6 py-4 border-t border-white/[0.07]">
+          <button onClick={onClose} className="btn btn-secondary flex-1 justify-center py-3">
             Cancel
           </button>
           <button
             onClick={save}
             disabled={saving}
-            className="flex-1 py-3 rounded-lg bg-accent text-black text-sm font-bold flex items-center justify-center gap-2 hover:bg-accent/90 disabled:opacity-60 transition-colors"
+            className="btn btn-primary flex-1 justify-center py-3 disabled:opacity-60"
           >
             <Save size={15} /> {saving ? "Saving..." : "Save"}
           </button>

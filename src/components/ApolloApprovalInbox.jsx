@@ -71,7 +71,7 @@ function PendingApprovalRow({ approval, onDecide, busy }) {
   const finding = approval.finding;
 
   return (
-    <div className="relative rounded-lg border border-bg-border bg-bg-soft overflow-hidden">
+    <div className="data-row relative overflow-hidden">
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${
         approval.risk_level === "high" || approval.risk_level === "critical"
           ? "bg-orange"
@@ -183,7 +183,7 @@ function DecidedApprovalRow({ approval, onRetry, retrying, onUndo, undoing }) {
     approval.execution_result.previousRole !== "revoked";
 
   return (
-    <div className="rounded-lg border border-bg-border/60 bg-bg-soft/50 px-4 py-3">
+    <div className="data-row px-4 py-3">
       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-white/30">
@@ -339,7 +339,7 @@ export default function ApolloApprovalInbox({ onChange }) {
   const rows = view === "pending" ? pending : decided;
 
   return (
-    <section className="card p-5">
+    <section className="control-surface p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
@@ -354,7 +354,7 @@ export default function ApolloApprovalInbox({ onChange }) {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1 rounded-lg border border-bg-border bg-bg-soft p-0.5">
+          <div className="tab-rail">
             <button
               type="button"
               onClick={() => setView("pending")}

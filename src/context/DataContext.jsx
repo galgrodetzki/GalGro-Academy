@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
+import { hasPlayableVideo } from "../utils/youtube";
 
 // ── DB ↔ JS mappers ──────────────────────────────────────────────────────────
 const toSession = (row) => ({
@@ -256,6 +257,7 @@ export function DataProvider({ children }) {
   const approveProposal = async (proposal) => {
     const denied = requireCoach();
     if (denied) return denied;
+    const playableSourceUrl = hasPlayableVideo(proposal.source_url) ? proposal.source_url : null;
     // Insert into custom_drills
     const drillRow = {
       proposal_id:     proposal.id,
@@ -269,7 +271,7 @@ export function DataProvider({ children }) {
       objectives:      proposal.objectives,
       coaching_points: proposal.coaching_points,
       source_url:      proposal.source_url,
-      video_url:       proposal.video_url ?? null,   // carry through from proposal
+      video_url:       proposal.video_url ?? playableSourceUrl,   // carry through playable review video
     };
     const { data: drillData, error: drillErr } = await supabase
       .from("custom_drills")

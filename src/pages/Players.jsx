@@ -154,17 +154,24 @@ export default function Players() {
   const viewingLinkedProfile = viewing?.profileId ? linkedProfileFor(viewing.profileId) : null;
 
   return (
-    <div>
+    <div className="space-y-5">
       <PageHeader
         title="Players"
         subtitle={`${players.length} goalkeeper${players.length !== 1 ? "s" : ""} in your roster`}
       >
+        <span className="chip chip-neutral">{keeperProfiles.length} keeper accounts</span>
         {canEdit && (
           <button onClick={openAdd} className="btn btn-primary">
             <Plus size={14} /> Add player
           </button>
         )}
       </PageHeader>
+
+      <RosterOverview
+        players={players}
+        keeperProfiles={keeperProfiles}
+        profileByPlayerId={keeperProfileByPlayerId}
+      />
 
       {players.length === 0 ? (
         <EmptyState
@@ -181,10 +188,10 @@ export default function Players() {
             const upcoming = sessions.filter((s) => s.status === "planned" || !s.status).length;
             const profileSummary = keeperProfileByPlayerId.get(p.id) ?? buildKeeperProfile(p, savedSessions, keeperNotes);
             return (
-              <div key={p.id} className="card card-hover p-4">
+              <div key={p.id} className="metric-card p-4">
                 {/* Header */}
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="w-11 h-11 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+                  <div className="w-11 h-11 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
                     <span className="font-display font-black text-accent text-lg">
                       {p.name.charAt(0).toUpperCase()}
                     </span>
@@ -223,7 +230,7 @@ export default function Players() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 pt-3 border-t border-bg-border">
+                <div className="flex items-center gap-2 pt-3 border-t border-white/[0.07]">
                   <button onClick={() => setViewing(p)} className="btn btn-secondary flex-1 py-1.5 text-xs">
                     <Eye size={12} /> View
                   </button>
@@ -256,12 +263,12 @@ export default function Players() {
       <AnimatePresence>
         {showForm && (
         <Motion.div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end sm:items-center justify-center sm:p-4"
+          className="fixed inset-0 bg-black/72 backdrop-blur-md z-[55] flex items-end sm:items-center justify-center sm:p-4"
           onClick={() => setShowForm(false)}
           {...modalBackdropMotion}
         >
           <Motion.div
-            className="card w-full sm:max-w-lg p-5 sm:p-6 max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-xl pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-6"
+            className="modal-card w-full sm:max-w-lg p-5 sm:p-6 max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-lg pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-6"
             onClick={(e) => e.stopPropagation()}
             {...modalPanelMotion}
           >
@@ -400,18 +407,18 @@ export default function Players() {
       <AnimatePresence>
         {viewing && viewingProfile && !showForm && (
         <Motion.div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
+          className="fixed inset-0 bg-black/72 backdrop-blur-md z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setViewing(null)}
           {...modalBackdropMotion}
         >
           <Motion.div
-            className="card w-full md:max-w-3xl max-h-[92vh] md:max-h-[90vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
+            className="modal-card w-full md:max-w-3xl max-h-[92vh] md:max-h-[90vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-lg pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
             {...modalPanelMotion}
           >
             {/* Player header */}
-            <div className="flex items-start gap-4 mb-6 pb-6 border-b border-bg-border">
-              <div className="w-16 h-16 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+            <div className="flex items-start gap-4 mb-6 pb-6 border-b border-white/[0.07]">
+              <div className="w-16 h-16 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
                 <span className="font-display font-black text-accent text-3xl">
                   {viewing.name.charAt(0).toUpperCase()}
                 </span>
@@ -421,7 +428,7 @@ export default function Players() {
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <span className="tag bg-accent/10 text-accent border border-accent/20">{viewing.position}</span>
                   {viewing.dominantFoot && (
-                    <span className="tag bg-bg-card2 border border-bg-border text-white/60">{viewing.dominantFoot} foot</span>
+                    <span className="tag border border-white/[0.08] bg-white/[0.04] text-white/60">{viewing.dominantFoot} foot</span>
                   )}
                   {viewingLinkedProfile && (
                     <span className="tag bg-electric/10 border border-electric/20 text-electric">
@@ -473,7 +480,7 @@ export default function Players() {
               />
             </div>
 
-            <div className="rounded-lg border border-bg-border bg-bg-soft p-4 mb-6">
+            <div className="data-row p-4 mb-6">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-start gap-3">
                   <div className="h-9 w-9 rounded-lg bg-electric/10 border border-electric/20 flex items-center justify-center shrink-0">
@@ -506,20 +513,20 @@ export default function Players() {
 
             {/* Notes */}
             {viewing.notes && (
-              <div className="rounded-lg border border-bg-border bg-bg-soft p-4 mb-6">
+              <div className="data-row p-4 mb-6">
                 <div className="label mb-1 flex items-center gap-1.5"><StickyNote size={12} /> Coach notes</div>
                 <p className="text-sm text-white/80 leading-relaxed">{viewing.notes}</p>
               </div>
             )}
 
             {viewingProfile.reflections.length > 0 && (
-              <div className="rounded-lg border border-bg-border bg-bg-soft p-4 mb-6">
+              <div className="data-row p-4 mb-6">
                 <div className="label mb-3 flex items-center gap-1.5"><MessageSquareText size={12} /> Keeper reflections</div>
                 <div className="space-y-3">
                   {viewingProfile.reflections.map((note) => {
                     const session = savedSessions.find((s) => s.id === note.sessionId);
                     return (
-                      <div key={note.id} className="border-t border-bg-border first:border-t-0 first:pt-0 pt-3">
+                      <div key={note.id} className="border-t border-white/[0.07] first:border-t-0 first:pt-0 pt-3">
                         <div className="flex items-center gap-2 text-[11px] text-white/40 mb-1">
                           <span className="font-semibold text-accent">{session?.name ?? "Session"}</span>
                           <span>·</span>
@@ -583,7 +590,7 @@ export default function Players() {
       </AnimatePresence>
 
       {toast && (
-        <div className="fixed left-4 right-4 md:left-auto md:right-6 bottom-20 md:bottom-6 z-[45] card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold text-center md:text-left">
+        <div className="toast-panel">
           {toast}
         </div>
       )}
@@ -591,10 +598,59 @@ export default function Players() {
   );
 }
 
+function RosterOverview({ players, keeperProfiles, profileByPlayerId }) {
+  const linked = players.filter((player) => player.profileId).length;
+  const pendingReflections = players.reduce((sum, player) => {
+    const profile = profileByPlayerId.get(player.id);
+    return sum + (profile?.missingReflections.length ?? 0);
+  }, 0);
+  const nextPlayers = players.filter((player) => profileByPlayerId.get(player.id)?.nextSession).length;
+
+  return (
+    <section className="workspace-panel grid grid-cols-1 gap-3 p-4 md:grid-cols-3 md:p-5">
+      <RosterSignal
+        icon={Users}
+        label="Roster"
+        value={`${players.length} keeper${players.length === 1 ? "" : "s"}`}
+        detail={`${linked}/${players.length || 0} linked to accounts`}
+        accent
+      />
+      <RosterSignal
+        icon={Calendar}
+        label="Upcoming"
+        value={`${nextPlayers} scheduled`}
+        detail="Players with a next session"
+      />
+      <RosterSignal
+        icon={MessageSquareText}
+        label="Reflections"
+        value={pendingReflections}
+        detail={`${keeperProfiles.length} keeper account${keeperProfiles.length === 1 ? "" : "s"} available`}
+        warning={pendingReflections > 0}
+      />
+    </section>
+  );
+}
+
+function RosterSignal({ icon: Icon, label, value, detail, accent = false, warning = false }) {
+  const color = warning ? "text-orange" : accent ? "text-accent" : "text-white";
+
+  return (
+    <div className="inspector-panel p-4">
+      <div className="mb-3 flex items-center gap-2 quiet-label">
+        <Icon size={13} className={color} />
+        {label}
+      </div>
+      <div className={`font-display text-2xl font-bold ${color}`}>{value}</div>
+      <p className="mt-1 text-xs text-white/45">{detail}</p>
+    </div>
+  );
+}
+
 /* ------------------------- SESSION LIST IN PLAYER DETAIL ---------------- */
 function ProfileMetric({ label, value, hint, accent }) {
   return (
-    <div className="rounded-lg border border-bg-border bg-bg-soft p-3">
+    <div className="metric-card p-3">
       <div className={`font-display text-xl font-bold ${accent ? "text-accent" : "text-white"}`}>{value}</div>
       <div className="text-[10px] uppercase tracking-wide text-white/35">{label}</div>
       {hint && <div className="mt-1 truncate text-[11px] text-white/40">{hint}</div>}
@@ -604,7 +660,7 @@ function ProfileMetric({ label, value, hint, accent }) {
 
 function ProfileSignal({ icon: Icon, label, title, detail, accent }) {
   return (
-    <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
+    <div className="data-row p-4">
       <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
         <Icon size={13} className={accent ? "text-accent" : "text-white/35"} />
         {label}
@@ -617,7 +673,7 @@ function ProfileSignal({ icon: Icon, label, title, detail, accent }) {
 
 function ProfileBodyStat({ icon: Icon, label, value }) {
   return (
-    <div className="rounded-lg border border-bg-border bg-bg-soft p-3 text-center">
+    <div className="data-row p-3 text-center">
       <Icon size={15} className="mx-auto mb-1 text-white/40" />
       <div className="text-sm font-bold">{value}</div>
       <div className="text-[10px] uppercase tracking-wide text-white/35">{label}</div>
@@ -632,7 +688,7 @@ function PlayerSessionList({ sessions, playerId, keeperNotes = [] }) {
 
   if (assigned.length === 0) {
     return (
-      <div className="rounded-lg border border-bg-border bg-bg-soft p-6 text-center text-white/40 text-sm">
+      <div className="data-row p-6 text-center text-white/40 text-sm">
         No sessions yet. Assign this player when saving a session in the Session Builder.
       </div>
     );
@@ -653,7 +709,7 @@ function PlayerSessionList({ sessions, playerId, keeperNotes = [] }) {
         const reflected = keeperNotes.some((note) => note.sessionId === s.id && note.playerId === playerId);
 
         return (
-          <div key={s.id} className="rounded-lg border border-bg-border bg-bg-soft p-3">
+          <div key={s.id} className="data-row p-3">
             <div className="flex items-center gap-2 mb-1">
               <span className={`w-2 h-2 rounded-full shrink-0 ${s.status === "completed" ? "bg-emerald-400" : "bg-accent"}`} />
               <div className="font-semibold text-sm truncate flex-1">{s.name}</div>
@@ -685,7 +741,7 @@ function PlayerSessionList({ sessions, playerId, keeperNotes = [] }) {
 
 function StatPill({ label, value, accent }) {
   return (
-    <div className="rounded-lg border border-bg-border bg-bg-soft p-2 text-center">
+    <div className="data-row p-2 text-center">
       <div className={`font-bold text-base ${accent ? "text-emerald-400" : "text-white"}`}>{value}</div>
       <div className="text-[10px] text-white/40 uppercase tracking-wide">{label}</div>
     </div>

@@ -5,6 +5,7 @@ import PageHeader from "../components/PageHeader";
 import CategoryIcon from "../components/CategoryIcon";
 import EmptyState from "../components/ui/EmptyState";
 import DrillDiagram from "../components/ui/DrillDiagram";
+import TacticalField from "../components/ui/TacticalField";
 import { DRILL_DIAGRAMS, getCategoryFallbackDiagram } from "../data/drillDiagrams";
 import { DRILLS, CATEGORIES, INTENSITY } from "../data/drills";
 import { useScrollLock } from "../hooks/useScrollLock";
@@ -18,6 +19,15 @@ const INT_COLORS = {
   High: "bg-orange-500/10 text-orange-400 border-orange-500/20",
   Max: "bg-red-500/10 text-red-400 border-red-500/20",
 };
+
+function LibrarySignal({ label, value, accent = false }) {
+  return (
+    <div className="inspector-panel p-3">
+      <div className="quiet-label">{label}</div>
+      <div className={`mt-2 font-display text-2xl font-bold ${accent ? "text-accent" : "text-white"}`}>{value}</div>
+    </div>
+  );
+}
 
 export default function DrillLibrary() {
   const { customDrills } = useData();
@@ -54,17 +64,46 @@ export default function DrillLibrary() {
   }, [allDrills, search, cat, intensity]);
 
   const catInfo = (key) => CATEGORIES.find((c) => c.key === key);
+  const activeCategory = cat === "all" ? null : catInfo(cat);
   useScrollLock(!!selected || !!zoomedDiagram);
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Drill Library"
         subtitle={`${allDrills.length} goalkeeping drills across ${CATEGORIES.length} categories${customDrills.length > 0 ? ` · ${customDrills.length} custom` : ""}`}
-      />
+      >
+        <span className="chip chip-neutral">{filtered.length} visible</span>
+        {customDrills.length > 0 && <span className="chip chip-success">{customDrills.length} custom</span>}
+      </PageHeader>
+
+      <section className="workspace-panel grid grid-cols-1 gap-4 p-4 md:p-5 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="flex flex-col justify-between">
+          <div>
+            <div className="quiet-label">Library intelligence</div>
+            <h2 className="mt-2 max-w-2xl font-display text-2xl font-bold text-white md:text-3xl">
+              {activeCategory ? `${activeCategory.label} work, ready to plan.` : "Every drill should earn its place."}
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/50">
+              Filter by category, intensity, diagram, or video support, then move the best work into the builder.
+            </p>
+          </div>
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            <LibrarySignal label="Visible" value={filtered.length} />
+            <LibrarySignal label="Categories" value={CATEGORIES.length} />
+            <LibrarySignal label="Custom" value={customDrills.length} accent />
+          </div>
+        </div>
+        <TacticalField
+          title="Drill logic"
+          subtitle={activeCategory ? activeCategory.label : "Search, filter, select"}
+          mode="builder"
+          className="hidden min-h-[230px] lg:block"
+        />
+      </section>
 
       {/* Search + filters */}
-      <div className="card p-3 md:p-4 mb-4">
+      <div className="control-surface">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 mb-3">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={16} />
@@ -92,10 +131,10 @@ export default function DrillLibrary() {
         <div className="flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto pb-1 -mx-1 px-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
           <button
             onClick={() => setCat("all")}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex-shrink-0 whitespace-nowrap ${
+            className={`filter-chip ${
               cat === "all"
-                ? "bg-accent text-black"
-                : "bg-bg-card2 text-white/60 hover:text-white border border-bg-border"
+                ? "filter-chip-active"
+                : "filter-chip-idle"
             }`}
           >
             All ({allDrills.length})
@@ -107,10 +146,10 @@ export default function DrillLibrary() {
               <button
                 key={c.key}
                 onClick={() => setCat(c.key)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
+                className={`filter-chip ${
                   active
-                    ? "bg-accent text-black"
-                    : "bg-bg-card2 text-white/60 hover:text-white border border-bg-border"
+                    ? "filter-chip-active"
+                    : "filter-chip-idle"
                 }`}
               >
                 <CategoryIcon category={c.key} size={12} />
@@ -130,7 +169,7 @@ export default function DrillLibrary() {
         variants={staggerContainer}
         initial="initial"
         animate="animate"
-        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
+        className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
       >
         {filtered.map((d) => {
           const info = catInfo(d.cat);
@@ -140,7 +179,7 @@ export default function DrillLibrary() {
               variants={staggerItem}
               whileHover={drillCardHover}
               onClick={() => setSelected(d)}
-              className="card card-hover p-4 text-left group"
+              className="metric-card group p-4 text-left"
             >
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-white/50">
@@ -157,7 +196,7 @@ export default function DrillLibrary() {
               <div className="font-bold text-base mb-1.5 group-hover:text-accent transition-colors">
                 {d.name}
               </div>
-              <p className="text-xs text-white/50 line-clamp-2 mb-3">{d.desc}</p>
+              <p className="text-xs text-white/50 line-clamp-2 mb-4 leading-relaxed">{d.desc}</p>
               <div className="flex items-center justify-between text-[11px] text-white/40">
                 <div className="flex items-center gap-3">
                   <span className="flex items-center gap-1">
@@ -212,12 +251,12 @@ export default function DrillLibrary() {
       <AnimatePresence>
         {selected && (
         <Motion.div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
+          className="fixed inset-0 bg-black/72 backdrop-blur-md z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setSelected(null)}
           {...modalBackdropMotion}
         >
           <Motion.div
-            className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
+            className="modal-card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-lg pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
             {...modalPanelMotion}
           >
@@ -242,7 +281,7 @@ export default function DrillLibrary() {
                   href={selected.video}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group relative block mb-5 overflow-hidden rounded-lg border border-bg-border aspect-video bg-bg-card2"
+                  className="group relative block mb-5 overflow-hidden rounded-lg border border-white/[0.09] aspect-video bg-white/[0.04]"
                   title="Watch on YouTube"
                 >
                   <img
@@ -317,7 +356,7 @@ export default function DrillLibrary() {
                 <div className="label">Equipment</div>
                 <div className="flex flex-wrap gap-2">
                   {selected.eq.map((e) => (
-                    <span key={e} className="tag bg-bg-card2 border border-bg-border text-white/70">
+                    <span key={e} className="tag border border-white/[0.08] bg-white/[0.045] text-white/70">
                       {e}
                     </span>
                   ))}
@@ -327,7 +366,7 @@ export default function DrillLibrary() {
 
             <button
               onClick={() => setSelected(null)}
-              className="btn btn-secondary w-full mt-4"
+              className="btn btn-secondary w-full justify-center mt-4"
             >
               Close
             </button>

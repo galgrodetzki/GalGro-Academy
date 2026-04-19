@@ -102,12 +102,12 @@ function AppInner() {
   const showMigration = canEdit && !migrated && hasLocalData() && sessions.length === 0 && players.length === 0;
 
   return (
-    <div className="min-h-screen">
+    <div className="app-chrome min-h-screen">
       <Sidebar page={activePage} setPage={goTo} onOpenSettings={() => setSettingsOpen(true)} />
       <MobileHeader onOpenSettings={() => setSettingsOpen(true)} />
       <BottomNav page={activePage} setPage={goTo} />
 
-      <main className="md:ml-60 max-w-[1600px] px-4 pt-16 pb-24 md:px-8 md:pt-8 md:pb-8">
+      <main className="mx-auto max-w-[1680px] px-4 pt-16 pb-24 md:ml-64 md:px-8 md:pt-8 md:pb-8 xl:px-10">
 
         {/* One-time migration banner */}
         {showMigration && (

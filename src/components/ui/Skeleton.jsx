@@ -9,10 +9,10 @@
 export default function Skeleton({ className = "", variant = "default" }) {
   if (variant === "card") {
     return (
-      <div className="card p-4 space-y-3">
+      <div className="workspace-panel-soft p-4 space-y-3">
         <div className="flex items-center justify-between">
           <Skeleton className="h-3 w-20" />
-          <Skeleton className="h-5 w-12 rounded-full" />
+          <Skeleton className="h-5 w-12 rounded-lg" />
         </div>
         <Skeleton className="h-5 w-3/4" />
         <Skeleton className="h-3 w-full" />

@@ -19,6 +19,7 @@ import StatChip from "./ui/StatChip";
 import StatusDot from "./ui/StatusDot";
 import DepartmentSparkline from "./ui/DepartmentSparkline";
 import { SkeletonList } from "./ui/Skeleton";
+import TacticalField from "./ui/TacticalField";
 import { fetchApolloAuditHistory, fetchApolloSparklineData } from "../lib/apolloAudit";
 import {
   runApolloDepartmentReview,
@@ -89,7 +90,7 @@ function StatusPill({ status, className = "" }) {
 
 function FindingRow({ finding }) {
   return (
-    <div className="relative rounded-lg border border-bg-border bg-bg-soft overflow-hidden">
+    <div className="data-row relative overflow-hidden">
       {/* Left severity bar */}
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${severityBar[finding.severity] ?? severityBar.info}`} />
       <div className="pl-4 pr-3 py-3">
@@ -128,7 +129,7 @@ function AuditRunButton({ run, selected, onSelect }) {
       className={`relative w-full rounded-lg border p-3 text-left transition-colors overflow-hidden ${
         selected
           ? "border-accent/40 bg-accent/8"
-          : "border-bg-border bg-bg-soft hover:border-accent/20 hover:bg-bg-card2"
+          : "border-white/[0.08] bg-black/[0.12] hover:border-white/[0.16] hover:bg-white/[0.035]"
       }`}
     >
       {/* Left status bar */}
@@ -170,7 +171,7 @@ function ApolloAuditHistory({ auditState, selectedRunId, onSelectRun, onRefresh 
   const refreshing = auditState.status === "refreshing";
 
   return (
-    <section className="card p-5">
+    <section className="control-surface p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-5">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
@@ -224,7 +225,7 @@ function ApolloAuditHistory({ auditState, selectedRunId, onSelectRun, onRefresh 
           </div>
 
           {/* Selected run detail */}
-          <div className="rounded-lg border border-bg-border bg-bg-card2 p-4">
+          <div className="data-row p-4">
             {selectedRun ? (
               <Motion.div
                 key={selectedRun.id}
@@ -232,7 +233,7 @@ function ApolloAuditHistory({ auditState, selectedRunId, onSelectRun, onRefresh 
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2 }}
               >
-                <div className="flex flex-col gap-3 border-b border-bg-border pb-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex flex-col gap-3 border-b border-white/[0.07] pb-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <div className="text-[10px] text-white/35 font-semibold">{fmtDate(selectedRun.createdAt)}</div>
                     <div className="mt-1 font-display text-lg font-bold">{selectedRun.summary}</div>
@@ -349,7 +350,7 @@ export default function ApolloCommandCenter({
     <div className="space-y-5">
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
-      <section className="academy-panel aura-info p-5 md:p-6">
+      <section className="command-surface p-5 md:p-6">
         <div className="relative z-10 grid grid-cols-1 gap-5 lg:grid-cols-[1.35fr_1fr] lg:items-center">
           <div>
             <div className="brand-overline mb-3">
@@ -374,23 +375,30 @@ export default function ApolloCommandCenter({
             </div>
           </div>
 
-          {/* Metrics block */}
-          <div className="rounded-lg border border-accent/15 bg-bg-soft/75 p-4 space-y-3">
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-accent/70 mb-2">
-              <Shield size={12} />
-              Live context
-            </div>
+          <div className="space-y-3">
+            <TacticalField
+              title="Apollo map"
+              subtitle="Departments report upward before action"
+              mode="command"
+              className="min-h-[230px]"
+            />
+            <div className="inspector-panel p-3">
+              <div className="mb-2 flex items-center gap-2 quiet-label">
+                <Shield size={12} className="text-accent" />
+                Live context
+              </div>
             <div className="flex flex-wrap gap-2">
               <StatChip label="Members" value={memberCount} variant="neutral" icon={<Users size={11} />} />
               <StatChip label="Proposals" value={pendingProposalCount} variant={pendingProposalCount > 0 ? "warning" : "neutral"} icon={<AlertTriangle size={11} />} />
               <StatChip label="Custom drills" value={customDrillCount} variant="accent" icon={<Sparkles size={11} />} />
               <StatChip label="Audit runs" value={auditState.runs.length} variant="info" icon={<Activity size={11} />} />
             </div>
-            <div className="pt-2 border-t border-bg-border/50">
+            <div className="mt-3 border-t border-white/[0.07] pt-3">
               <div className="font-display text-lg font-bold text-white/90">Foundation only</div>
               <p className="mt-1 text-xs text-white/45">
                 No background execution, no external tools, no production changes delegated yet.
               </p>
+            </div>
             </div>
           </div>
         </div>
@@ -403,7 +411,7 @@ export default function ApolloCommandCenter({
       <ApolloApprovalInbox onChange={() => loadAuditHistory()} />
 
       {/* ── Departments with sparklines ──────────────────────────────── */}
-      <section className="card p-5">
+      <section className="control-surface p-5">
         <div className="flex items-center gap-2 mb-4">
           <Bot size={15} className="text-info" />
           <h3 className="font-display font-bold">Departments</h3>
@@ -416,7 +424,7 @@ export default function ApolloCommandCenter({
             const lastRun = deptRuns[deptRuns.length - 1];
 
             return (
-              <div key={dept.name} className="rounded-lg border border-bg-border bg-bg-soft p-4">
+              <div key={dept.name} className="data-row p-4">
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="font-bold text-sm">{dept.name}</div>
                   <StatusPill status={dept.status} />
@@ -435,7 +443,7 @@ export default function ApolloCommandCenter({
                 </div>
 
                 <p className="text-xs leading-relaxed text-white/50">{dept.scope}</p>
-                <p className="mt-2.5 border-t border-bg-border pt-2.5 text-xs leading-relaxed text-white/35">
+                <p className="mt-2.5 border-t border-white/[0.07] pt-2.5 text-xs leading-relaxed text-white/35">
                   {dept.reports}
                 </p>
               </div>
@@ -445,7 +453,7 @@ export default function ApolloCommandCenter({
       </section>
 
       {/* ── Server-side Runner ───────────────────────────────────────── */}
-      <section className="card p-5">
+      <section className="control-surface p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
@@ -505,7 +513,7 @@ export default function ApolloCommandCenter({
                 { label: "Audit", value: runnerState.result.audit?.status },
                 { label: "Mode", value: runnerState.result.report?.mode },
               ].map(({ label, value }) => (
-                <div key={label} className="rounded-lg border border-bg-border bg-bg-soft p-3">
+                <div key={label} className="data-row p-3">
                   <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">{label}</div>
                   <div className="mt-1 text-sm font-bold text-white/85">{value}</div>
                 </div>
@@ -536,14 +544,14 @@ export default function ApolloCommandCenter({
 
       {/* ── Charter + Departments reference ──────────────────────────── */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[0.85fr_1.15fr]">
-        <div className="card p-5">
+        <div className="control-surface p-5">
           <div className="flex items-center gap-2 mb-4">
             <Shield size={15} className="text-accent" />
             <h3 className="font-display font-bold">Apollo Charter</h3>
           </div>
           <div className="space-y-2">
             {APOLLO_PRINCIPLES.map((p) => (
-              <div key={p.label} className="rounded-lg border border-bg-border bg-bg-soft p-3">
+              <div key={p.label} className="data-row p-3">
                 <div className="text-[10px] font-bold uppercase tracking-wide text-white/35 mb-0.5">{p.label}</div>
                 <div className="text-sm font-semibold text-white/85">{p.value}</div>
               </div>
@@ -551,14 +559,14 @@ export default function ApolloCommandCenter({
           </div>
         </div>
 
-        <div className="card p-5">
+        <div className="control-surface p-5">
           <div className="flex items-center gap-2 mb-4">
             <Zap size={15} className="text-orange" />
             <h3 className="font-display font-bold">Build Sequence</h3>
           </div>
           <div className="space-y-2">
             {APOLLO_FOUNDATION_STEPS.map((step) => (
-              <div key={step.step} className="rounded-lg border border-bg-border bg-bg-soft p-3">
+              <div key={step.step} className="data-row p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">{step.step}</div>
@@ -574,14 +582,14 @@ export default function ApolloCommandCenter({
       </section>
 
       {/* ── Approval gates ───────────────────────────────────────────── */}
-      <section className="card p-5">
+      <section className="control-surface p-5">
         <div className="flex items-center gap-2 mb-4">
           <CheckCircle2 size={15} className="text-accent" />
           <h3 className="font-display font-bold">Approval Gates</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {APOLLO_APPROVAL_TIERS.map((tier) => (
-            <div key={tier.tier} className="rounded-lg border border-bg-border bg-bg-soft p-4">
+            <div key={tier.tier} className="data-row p-4">
               <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between mb-2">
                 <div className="font-bold text-sm">{tier.tier}</div>
                 <span className="text-[11px] font-semibold text-accent/80">{tier.authority}</span>

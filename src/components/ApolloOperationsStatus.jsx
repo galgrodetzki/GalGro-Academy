@@ -35,7 +35,7 @@ function StatusOrb({ state = "idle" }) {
       labelColor: "text-warning",
     },
     idle: {
-      outer: "bg-bg-card2 border-bg-border",
+      outer: "bg-white/[0.04] border-white/[0.08]",
       middle: "bg-white/10",
       inner: "bg-white/30",
       glow: "",
@@ -47,15 +47,14 @@ function StatusOrb({ state = "idle" }) {
 
   return (
     <div className="flex flex-col items-center gap-3">
-      {/* Orb */}
       <Motion.div
         initial={{ scale: 0.85, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 260, damping: 22 }}
-        className={`relative flex h-16 w-16 items-center justify-center rounded-full border ${config.outer}`}
+        className={`relative flex h-16 w-16 items-center justify-center rounded-lg border ${config.outer}`}
       >
-        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${config.middle}`}>
-          <div className={`h-5 w-5 rounded-full ${config.inner} ${config.glow} ${config.pulse}`} />
+        <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${config.middle}`}>
+          <div className={`h-5 w-5 rounded-md ${config.inner} ${config.glow} ${config.pulse}`} />
         </div>
       </Motion.div>
       <span className={`text-[11px] font-semibold ${config.labelColor}`}>{config.label}</span>
@@ -98,7 +97,7 @@ function InfoRow({ label, value, tone = "neutral" }) {
   }[tone];
 
   return (
-    <div className="flex items-center justify-between gap-2 py-1.5 border-b border-bg-border/50 last:border-0">
+    <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.07] last:border-0">
       <span className="text-[11px] text-white/40 uppercase tracking-wide font-semibold">{label}</span>
       <span className={`text-[11px] font-bold ${toneClass}`}>{value}</span>
     </div>
@@ -132,7 +131,7 @@ export default function ApolloOperationsStatus() {
   const systemState = state.data ? deriveSystemState(model, heartbeat) : "idle";
 
   return (
-    <section className="card p-5">
+    <section className="control-surface p-5">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-2">
@@ -159,7 +158,7 @@ export default function ApolloOperationsStatus() {
       {loading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="space-y-3 rounded-lg border border-bg-border p-4">
+            <div key={i} className="space-y-3 rounded-lg border border-white/[0.08] p-4">
               <Skeleton className="h-16 w-16 rounded-full mx-auto" />
               <Skeleton className="h-3 w-20 mx-auto" />
             </div>
@@ -168,12 +167,12 @@ export default function ApolloOperationsStatus() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Center: orb */}
-          <div className="rounded-lg border border-bg-border bg-bg-soft p-4 flex flex-col items-center justify-center gap-3 order-first sm:order-none">
+          <div className="data-row p-4 flex flex-col items-center justify-center gap-3 order-first sm:order-none">
             <StatusOrb state={systemState} />
           </div>
 
           {/* Model cell */}
-          <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
+          <div className="data-row p-4">
             <div className="flex items-center gap-1.5 mb-3">
               <BrainCircuit size={13} className="text-info" />
               <span className="text-[10px] font-bold uppercase tracking-wide text-white/40">Model</span>
@@ -227,7 +226,7 @@ export default function ApolloOperationsStatus() {
           </div>
 
           {/* Heartbeat + context cell */}
-          <div className="rounded-lg border border-bg-border bg-bg-soft p-4">
+          <div className="data-row p-4">
             <div className="flex items-center gap-1.5 mb-3">
               <RadioTower size={13} className="text-info" />
               <span className="text-[10px] font-bold uppercase tracking-wide text-white/40">Heartbeat</span>
@@ -276,7 +275,7 @@ export default function ApolloOperationsStatus() {
             })()}
 
             {context && (
-              <div className="mt-4 pt-3 border-t border-bg-border/50">
+              <div className="mt-4 pt-3 border-t border-white/[0.07]">
                 <div className="flex items-center gap-1.5 mb-2">
                   <ShieldCheck size={12} className="text-white/30" />
                   <span className="text-[10px] font-bold uppercase tracking-wide text-white/30">Context packs</span>

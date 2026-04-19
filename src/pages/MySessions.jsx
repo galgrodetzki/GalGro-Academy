@@ -212,18 +212,29 @@ export default function MySessions() {
   };
 
   return (
-    <div>
+    <div className="space-y-5">
       <PageHeader
         title="My Sessions"
         subtitle={`${upcoming.length} upcoming · ${past.length} completed`}
+      >
+        <span className="chip chip-neutral">{visibleSessions.length} total</span>
+        {isKeeper && currentPlayer && <span className="chip chip-success">{currentPlayer.name}</span>}
+      </PageHeader>
+
+      <SessionsOverview
+        upcoming={upcoming}
+        past={past}
+        visibleSessions={visibleSessions}
+        currentPlayer={currentPlayer}
+        isKeeper={isKeeper}
       />
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-5 md:mb-6 bg-bg-card border border-bg-border rounded-xl p-1 w-full sm:w-fit">
+      <div className="tab-rail w-full sm:w-fit">
         <TabBtn active={tab === "upcoming"} onClick={() => setTab("upcoming")}>
           <CalendarDays size={14} /> Upcoming
           {upcoming.length > 0 && (
-            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${tab === "upcoming" ? "bg-black/20 text-black" : "bg-bg-card2 text-white/50"}`}>
+            <span className={`ml-1 px-1.5 py-0.5 rounded-lg text-[10px] font-bold ${tab === "upcoming" ? "bg-black/20 text-black" : "bg-white/[0.05] text-white/50"}`}>
               {upcoming.length}
             </span>
           )}
@@ -231,7 +242,7 @@ export default function MySessions() {
         <TabBtn active={tab === "past"} onClick={() => setTab("past")}>
           <CheckCircle2 size={14} /> Completed
           {past.length > 0 && (
-            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${tab === "past" ? "bg-black/20 text-black" : "bg-bg-card2 text-white/50"}`}>
+            <span className={`ml-1 px-1.5 py-0.5 rounded-lg text-[10px] font-bold ${tab === "past" ? "bg-black/20 text-black" : "bg-white/[0.05] text-white/50"}`}>
               {past.length}
             </span>
           )}
@@ -287,12 +298,12 @@ export default function MySessions() {
       <AnimatePresence>
         {viewing && !editing && (
         <Motion.div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
+          className="fixed inset-0 bg-black/72 backdrop-blur-md z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setViewingId(null)}
           {...modalBackdropMotion}
         >
           <Motion.div
-            className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
+            className="modal-card w-full md:max-w-2xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-lg pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
             {...modalPanelMotion}
           >
@@ -306,7 +317,7 @@ export default function MySessions() {
             </div>
 
             <h2 className="font-display text-2xl font-bold mb-1">{viewing.name}</h2>
-            <div className="flex items-center gap-3 text-xs text-white/50 mb-4 pb-4 border-b border-bg-border">
+            <div className="flex items-center gap-3 text-xs text-white/50 mb-4 pb-4 border-b border-white/[0.07]">
               <span className="flex items-center gap-1"><Calendar size={11} /> {formatDate(viewing.sessionDate)}</span>
               <span>·</span>
               <span className="flex items-center gap-1"><Clock size={11} /> {viewing.totalDuration} / {viewing.target} min</span>
@@ -336,7 +347,7 @@ export default function MySessions() {
                       <span key={pid} className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border text-sm font-semibold ${
                         attended
                           ? "bg-accent/10 border-accent/20 text-accent"
-                          : "bg-bg-card2 border-bg-border text-white/30 line-through"
+                          : "bg-white/[0.04] border-white/[0.08] text-white/30 line-through"
                       }`}>
                         <span className="w-5 h-5 rounded-md bg-current/10 flex items-center justify-center text-[11px] font-black">{p.name.charAt(0)}</span>
                         {p.name}
@@ -350,14 +361,14 @@ export default function MySessions() {
 
             {/* Session notes */}
             {viewing.sessionNotes && (
-              <div className="card bg-bg-soft p-4 mb-4">
+              <div className="data-row p-4 mb-4">
                 <div className="label mb-1">Session notes</div>
                 <p className="text-sm text-white/80 leading-relaxed">{viewing.sessionNotes}</p>
               </div>
             )}
 
             {canSaveKeeperReflection(viewing) && (
-              <div className="card bg-bg-soft p-4 mb-4">
+              <div className="data-row p-4 mb-4">
                 <div className="label mb-1 flex flex-wrap items-center justify-between gap-2">
                   <span>Your reflection</span>
                   {keeperNoteSavedAt && (
@@ -398,7 +409,7 @@ export default function MySessions() {
                 if (!d) return null;
                 const hasActual = b.actualDur !== undefined && b.actualDur !== b.dur;
                 return (
-                  <div key={b.blockId} className="card p-3 bg-bg-soft">
+                  <div key={b.blockId} className="data-row p-3">
                     <div className="flex items-center gap-2 text-[11px] text-white/50">
                       <span className="bg-accent/20 text-accent rounded w-5 h-5 flex items-center justify-center font-bold shrink-0">{i + 1}</span>
                       <CategoryIcon category={d.cat} size={11} />
@@ -419,7 +430,7 @@ export default function MySessions() {
                     </div>
 
                     {b.notes && (
-                      <p className="text-xs text-white/60 mt-2 italic border-t border-bg-border pt-2">
+                      <p className="text-xs text-white/60 mt-2 italic border-t border-white/[0.07] pt-2">
                         📋 {b.notes}
                       </p>
                     )}
@@ -467,12 +478,12 @@ export default function MySessions() {
       <AnimatePresence>
         {editing && editData && (
         <Motion.div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[55] flex items-end md:items-center justify-center md:p-4"
+          className="fixed inset-0 bg-black/72 backdrop-blur-md z-[55] flex items-end md:items-center justify-center md:p-4"
           onClick={() => setEditing(null)}
           {...modalBackdropMotion}
         >
           <Motion.div
-            className="card w-full md:max-w-2xl max-h-[92vh] md:max-h-[90vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
+            className="modal-card w-full md:max-w-2xl max-h-[92vh] md:max-h-[90vh] overflow-y-auto p-5 md:p-8 rounded-t-2xl md:rounded-lg pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-8"
             onClick={(e) => e.stopPropagation()}
             {...modalPanelMotion}
           >
@@ -510,7 +521,7 @@ export default function MySessions() {
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all ${
                           attended
                             ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
-                            : "border-bg-border text-white/30 line-through"
+                            : "border-white/[0.08] text-white/30 line-through"
                         }`}
                       >
                         <span className="w-5 h-5 rounded-md bg-current/10 flex items-center justify-center text-[11px] font-black">
@@ -543,7 +554,7 @@ export default function MySessions() {
                 const d = drillById(allDrills, b.drillId);
                 if (!d) return null;
                 return (
-                  <div key={b.blockId} className="card p-4 bg-bg-soft">
+                  <div key={b.blockId} className="data-row p-4">
                     <div className="flex items-center gap-2 text-[11px] text-white/50 mb-1">
                       <span className="bg-accent/20 text-accent rounded w-5 h-5 flex items-center justify-center font-bold shrink-0">{i + 1}</span>
                       <CategoryIcon category={d.cat} size={11} />
@@ -554,7 +565,7 @@ export default function MySessions() {
                       {/* Planned (read-only) */}
                       <div>
                         <div className="label text-white/30 mb-1">Planned duration</div>
-                        <div className="flex items-center gap-1 bg-bg-card border border-bg-border rounded px-3 py-2 text-sm text-white/50">
+                        <div className="flex items-center gap-1 rounded border border-white/[0.08] bg-black/[0.14] px-3 py-2 text-sm text-white/50">
                           <Clock size={12} /> {b.dur} min
                         </div>
                       </div>
@@ -601,10 +612,58 @@ export default function MySessions() {
         )}
       </AnimatePresence>
       {toast && (
-        <div className="fixed left-4 right-4 md:left-auto md:right-6 bottom-20 md:bottom-6 z-[45] card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold text-center md:text-left">
+        <div className="toast-panel">
           {toast}
         </div>
       )}
+    </div>
+  );
+}
+
+function SessionsOverview({ upcoming, past, visibleSessions, currentPlayer, isKeeper }) {
+  const nextSession = upcoming[0] ?? null;
+  const lastSession = past[0] ?? null;
+
+  return (
+    <section className="workspace-panel grid grid-cols-1 gap-3 p-4 md:grid-cols-[1.15fr_0.85fr] md:p-5">
+      <div>
+        <div className="quiet-label">Session control</div>
+        <h2 className="mt-2 font-display text-2xl font-bold text-white">
+          {nextSession ? nextSession.name : "No upcoming session on deck"}
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-white/50">
+          {nextSession
+            ? `${formatDate(nextSession.sessionDate)} · ${nextSession.blocks?.length ?? 0} drills assigned${isKeeper && currentPlayer ? ` to ${currentPlayer.name}` : ""}.`
+            : "Plan or assign a session and it will become the next operational focus here."}
+        </p>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <SessionSignal icon={CalendarDays} label="Upcoming" value={upcoming.length} />
+          <SessionSignal icon={CheckCircle2} label="Completed" value={past.length} />
+          <SessionSignal icon={Layers} label="Total" value={visibleSessions.length} />
+        </div>
+      </div>
+      <div className="inspector-panel p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="quiet-label">Latest recap</div>
+          <Clock size={15} className="text-white/35" />
+        </div>
+        <div className="font-display text-xl font-bold text-white">{lastSession?.name ?? "No recap yet"}</div>
+        <p className="mt-2 text-sm leading-relaxed text-white/45">
+          {lastSession ? formatDate(lastSession.sessionDate) : "Completed sessions and keeper reflections will build the history."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function SessionSignal({ icon: Icon, label, value }) {
+  return (
+    <div className="inspector-panel p-3">
+      <div className="mb-2 flex items-center gap-2 quiet-label">
+        <Icon size={12} />
+        {label}
+      </div>
+      <div className="font-display text-2xl font-bold text-white">{value}</div>
     </div>
   );
 }
@@ -613,7 +672,7 @@ function TabBtn({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${active ? "bg-accent text-black" : "text-white/50 hover:text-white"}`}
+      className={`tab-button sm:flex-none ${active ? "tab-button-active" : "tab-button-idle"}`}
     >
       {children}
     </button>
@@ -625,7 +684,7 @@ function SessionCard({ session: s, tab, players = [], drills = [], canEdit, refl
   const viewLabel = reflectionStatus === "needed" ? "Reflect" : "View";
 
   return (
-    <div className="card card-hover p-4">
+    <div className="metric-card p-4">
       <div className="min-w-0 mb-2">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-display font-bold text-base truncate">{s.name}</h3>
@@ -673,7 +732,7 @@ function SessionCard({ session: s, tab, players = [], drills = [], canEdit, refl
             const p = playerById(players, pid);
             if (!p) return null;
             return (
-              <span key={pid} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-[11px] font-semibold">
+              <span key={pid} className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-accent/10 border border-accent/20 text-accent text-[11px] font-semibold">
                 {p.name.charAt(0)} {p.name.split(" ")[0]}
               </span>
             );
@@ -681,7 +740,7 @@ function SessionCard({ session: s, tab, players = [], drills = [], canEdit, refl
         </div>
       )}
 
-      <div className="flex items-center gap-2 pt-3 border-t border-bg-border">
+      <div className="flex items-center gap-2 pt-3 border-t border-white/[0.07]">
         <button onClick={onView} className="btn btn-secondary flex-1 py-1.5 text-xs">
           <ViewIcon size={12} /> {viewLabel}
         </button>

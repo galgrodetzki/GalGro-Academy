@@ -8,7 +8,7 @@ import { formatAccessDate, getAccessStatus, getLocalDateKey } from "../utils/acc
 import {
   Plus, Copy, Trash2, Check, Users, Shield, Key,
   Bot, Clock, CheckCircle2, XCircle, ChevronDown, ChevronUp,
-  Sparkles, BookOpen, Dumbbell, Timer, Zap, PlayCircle,
+  Sparkles, BookOpen, Dumbbell, Timer, Zap, PlayCircle, Play, ExternalLink,
   CalendarDays, Edit3, Save, X, HeartHandshake,
 } from "lucide-react";
 import {
@@ -18,6 +18,7 @@ import {
   deleteGameDay,
 } from "../lib/gameDays";
 import MentorTemplatesPanel from "../components/MentorTemplatesPanel";
+import { getYouTubeThumbnail, hasPlayableVideo } from "../utils/youtube";
 
 const ROLES = [
   { value: "assistant", label: "Assistant Coach", desc: "Can build & edit sessions" },
@@ -53,9 +54,12 @@ const INTENSITY_COLOR = {
 
 function ProposalCard({ proposal, onApprove, onReject, loading }) {
   const [expanded, setExpanded] = useState(false);
+  const reviewUrl = proposal.video_url || proposal.source_url;
+  const videoThumb = getYouTubeThumbnail(reviewUrl, "hq");
+  const isPlayableVideo = hasPlayableVideo(reviewUrl);
 
   return (
-    <div className="card p-5 border border-bg-border hover:border-accent/20 transition-colors">
+    <div className="metric-card p-5">
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">
         <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -100,6 +104,44 @@ function ProposalCard({ proposal, onApprove, onReject, loading }) {
       {/* Description */}
       <p className="text-xs text-white/60 leading-relaxed mb-3 line-clamp-3">{proposal.description}</p>
 
+      {reviewUrl && (
+        <a
+          href={reviewUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group mb-4 block overflow-hidden rounded-lg border border-white/[0.08] bg-black/[0.16] transition-colors hover:border-accent/35"
+        >
+          {videoThumb ? (
+            <div className="relative aspect-video overflow-hidden bg-white/[0.04]">
+              <img
+                src={videoThumb}
+                alt={`${proposal.name} source video`}
+                loading="lazy"
+                className="h-full w-full object-cover opacity-86 transition-transform duration-300 group-hover:scale-[1.03]"
+                onError={(event) => { event.currentTarget.style.display = "none"; }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-500 text-white shadow-[0_14px_34px_rgba(0,0,0,0.38)] transition-transform duration-200 group-hover:scale-105">
+                  <Play size={20} fill="currentColor" className="translate-x-[1px]" />
+                </span>
+              </div>
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+            <div className="min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-white/35">
+                {isPlayableVideo ? "Source video" : "Review source"}
+              </div>
+              <div className="mt-0.5 truncate text-xs font-semibold text-white/75">
+                {isPlayableVideo ? "Open YouTube before approving" : reviewUrl}
+              </div>
+            </div>
+            <ExternalLink size={14} className="shrink-0 text-accent" />
+          </div>
+        </a>
+      )}
+
       {/* Expand/collapse */}
       <button
         onClick={() => setExpanded(!expanded)}
@@ -109,7 +151,7 @@ function ProposalCard({ proposal, onApprove, onReject, loading }) {
       </button>
 
       {expanded && (
-        <div className="space-y-3 mb-4 border-t border-bg-border pt-3">
+        <div className="space-y-3 mb-4 border-t border-white/[0.07] pt-3">
           {proposal.objectives?.length > 0 && (
             <div>
               <div className="label mb-1.5">Objectives</div>
@@ -180,7 +222,7 @@ function ProposalCard({ proposal, onApprove, onReject, loading }) {
 function ReviewedCard({ proposal }) {
   const approved = proposal.status === "approved";
   return (
-    <div className="flex items-center gap-3 p-3 bg-bg-soft rounded-lg">
+    <div className="data-row flex items-center gap-3 p-3">
       {approved
         ? <CheckCircle2 size={15} className="text-accent flex-shrink-0" />
         : <XCircle size={15} className="text-red-400/60 flex-shrink-0" />}
@@ -191,6 +233,33 @@ function ReviewedCard({ proposal }) {
       <span className={`text-[10px] font-bold uppercase tracking-wide ${approved ? "text-accent" : "text-red-400/60"}`}>
         {proposal.status}
       </span>
+    </div>
+  );
+}
+
+function AdminOverview({ profiles, invites, pendingProposalCount, customDrills }) {
+  const activeMembers = profiles.filter((profile) => profile.role !== "revoked").length;
+  const openInvites = invites.filter((invite) => !invite.used).length;
+
+  return (
+    <section className="workspace-panel grid grid-cols-2 gap-2 p-3 md:grid-cols-4 md:p-4">
+      <AdminSignal icon={Users} label="Members" value={activeMembers} detail="Active access" />
+      <AdminSignal icon={Key} label="Invites" value={openInvites} detail="Open codes" />
+      <AdminSignal icon={Bot} label="Inbox" value={pendingProposalCount} detail="Needs review" accent={pendingProposalCount > 0} />
+      <AdminSignal icon={BookOpen} label="Custom" value={customDrills.length} detail="Approved drills" />
+    </section>
+  );
+}
+
+function AdminSignal({ icon: Icon, label, value, detail, accent = false }) {
+  return (
+    <div className="inspector-panel p-3">
+      <div className="mb-2 flex items-center gap-2 quiet-label">
+        <Icon size={12} className={accent ? "text-accent" : "text-white/35"} />
+        {label}
+      </div>
+      <div className={`font-display text-2xl font-bold ${accent ? "text-accent" : "text-white"}`}>{value}</div>
+      <div className="mt-1 truncate text-[11px] text-white/40">{detail}</div>
     </div>
   );
 }
@@ -470,17 +539,24 @@ export default function Admin() {
   );
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader title="Admin" subtitle="Manage access, Apollo command, agent proposals, and your drill library" />
 
+      <AdminOverview
+        profiles={profiles}
+        invites={invites}
+        pendingProposalCount={pendingProposalCount}
+        customDrills={customDrills}
+      />
+
       {/* Tab bar */}
-      <div className="flex gap-1 bg-bg-soft border border-bg-border rounded-xl p-1 mb-6">
+      <div className="tab-rail">
         {tabs.map(({ id, label, shortLabel, icon: Icon, badge }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-colors relative ${
-              activeTab === id ? "bg-accent text-black" : "text-white/50 hover:text-white"
+            className={`tab-button relative text-xs ${
+              activeTab === id ? "tab-button-active" : "tab-button-idle"
             }`}
           >
             <Icon size={13} />
@@ -501,7 +577,7 @@ export default function Admin() {
       {activeTab === "access" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Invite generator */}
-          <div className="card p-5">
+          <div className="control-surface p-5">
             <div className="flex items-center gap-2 mb-4">
               <Key size={16} className="text-accent" />
               <h2 className="font-display font-bold">Create Invite</h2>
@@ -510,7 +586,7 @@ export default function Admin() {
             <div className="space-y-3 mb-4">
               {ROLES.map((r) => (
                 <label key={r.value} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  role === r.value ? "border-accent/40 bg-accent/5" : "border-bg-border hover:border-bg-card2"
+                  role === r.value ? "border-accent/40 bg-accent/5" : "border-white/[0.08] hover:border-white/[0.16]"
                 }`}>
                   <input
                     type="radio" name="role" value={r.value}
@@ -534,7 +610,7 @@ export default function Admin() {
               <div className="mt-4 space-y-2">
                 <div className="label">Active codes</div>
                 {invites.filter((i) => !i.used).map((inv) => (
-                  <div key={inv.id} className="flex items-center gap-2 bg-bg-soft rounded-lg px-3 py-2">
+                  <div key={inv.id} className="data-row flex items-center gap-2 px-3 py-2">
                     <code className="flex-1 text-sm font-mono text-accent tracking-widest">{inv.code}</code>
                     <span className="text-[10px] text-white/40 capitalize">{inv.role.replace("_", " ")}</span>
                     <button onClick={() => copyCode(inv.code)} className="text-white/40 hover:text-accent transition-colors p-1">
@@ -550,7 +626,7 @@ export default function Admin() {
           </div>
 
           {/* Members list */}
-          <div className="card p-5">
+          <div className="control-surface p-5">
             <div className="flex items-center gap-2 mb-4">
               <Users size={16} className="text-electric" />
               <h2 className="font-display font-bold">Members ({profiles.length})</h2>
@@ -560,7 +636,7 @@ export default function Admin() {
                 const linkedPlayer = linkedPlayerForProfile(p.id);
                 const accessStatus = getAccessStatus(p, today);
                 return (
-                  <div key={p.id} className="flex flex-col gap-3 p-3 bg-bg-soft rounded-lg sm:flex-row sm:items-center">
+                  <div key={p.id} className="data-row flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
                     <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-sm font-black text-accent flex-shrink-0">
                       {p.name?.charAt(0)?.toUpperCase() ?? "?"}
                     </div>
@@ -652,7 +728,7 @@ export default function Admin() {
             </div>
 
             {invites.filter((i) => i.used).length > 0 && (
-              <div className="mt-4 pt-4 border-t border-bg-border">
+              <div className="mt-4 pt-4 border-t border-white/[0.07]">
                 <div className="label mb-2">Used invites ({invites.filter((i) => i.used).length})</div>
                 <div className="space-y-1">
                   {invites.filter((i) => i.used).map((inv) => (
@@ -683,7 +759,7 @@ export default function Admin() {
       {activeTab === "inbox" && (
         <div>
           {/* Info banner */}
-          <div className="card p-4 mb-5 border-electric/20 flex items-start gap-3">
+          <div className="control-surface mb-5 flex items-start gap-3 border-electric/20">
             <div className="w-8 h-8 rounded-lg bg-electric/10 flex items-center justify-center flex-shrink-0 mt-0.5">
               <Sparkles size={15} className="text-electric" />
             </div>
@@ -698,7 +774,7 @@ export default function Admin() {
           </div>
 
           {pendingProposals.length === 0 && reviewedProposals.length === 0 && (
-            <div className="card p-12 flex flex-col items-center justify-center text-center">
+            <div className="metric-card p-12 flex flex-col items-center justify-center text-center">
               <Bot size={36} className="text-white/20 mb-3" />
               <div className="font-bold text-white/40 mb-1">No proposals yet</div>
               <p className="text-xs text-white/25 max-w-xs">
@@ -957,7 +1033,7 @@ export default function Admin() {
       {/* ── CUSTOM DRILLS LIBRARY TAB ── */}
       {activeTab === "library" && (
         <div>
-          <div className="card p-4 mb-5 border-accent/20 flex items-start gap-3">
+          <div className="control-surface mb-5 flex items-start gap-3 border-accent/20">
             <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0 mt-0.5">
               <BookOpen size={15} className="text-accent" />
             </div>
@@ -971,7 +1047,7 @@ export default function Admin() {
           </div>
 
           {customDrills.length === 0 ? (
-            <div className="card p-12 flex flex-col items-center justify-center text-center">
+            <div className="metric-card p-12 flex flex-col items-center justify-center text-center">
               <BookOpen size={36} className="text-white/20 mb-3" />
               <div className="font-bold text-white/40 mb-1">No custom drills yet</div>
               <p className="text-xs text-white/25 max-w-xs">
@@ -981,7 +1057,7 @@ export default function Admin() {
           ) : (
             <div className="space-y-3">
               {customDrills.map((drill) => (
-                <div key={drill.id} className="card p-4 flex items-start gap-3">
+                <div key={drill.id} className="metric-card p-4 flex items-start gap-3">
                   <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <Zap size={14} className="text-accent" />
                   </div>
@@ -1015,7 +1091,7 @@ export default function Admin() {
       )}
 
       {toast && (
-        <div className="fixed left-4 right-4 md:left-auto md:right-6 bottom-20 md:bottom-6 z-[45] card bg-bg-card px-4 py-3 border-accent/40 shadow-glow text-sm font-semibold text-center">
+        <div className="toast-panel md:text-center">
           {toast}
         </div>
       )}

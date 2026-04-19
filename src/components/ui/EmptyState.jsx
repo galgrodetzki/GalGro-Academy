@@ -28,14 +28,14 @@ export default function EmptyState({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className={`
-        ${isEmbedded ? "" : "card"}
+        ${isEmbedded ? "" : "workspace-panel-soft"}
         ${isCompact ? "p-6" : "p-10 md:p-14"}
         flex flex-col items-center text-center
         ${className}
       `}
     >
       {icon && (
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent border border-accent/20">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-accent-soft text-accent border border-accent/20">
           {icon}
         </div>
       )}

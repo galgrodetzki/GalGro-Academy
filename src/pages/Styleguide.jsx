@@ -7,6 +7,7 @@ import StatChip from "../components/ui/StatChip";
 import SectionHeading from "../components/ui/SectionHeading";
 import StatusDot from "../components/ui/StatusDot";
 import DrillDiagram from "../components/ui/DrillDiagram";
+import TacticalField from "../components/ui/TacticalField";
 import { DRILL_DIAGRAMS } from "../data/drillDiagrams";
 import { DRILLS } from "../data/drills";
 
@@ -191,6 +192,32 @@ export default function Styleguide() {
               Use for Apollo / data surfaces. Still max one per screen.
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* ── Workspace surfaces ───────────────────────────────────────── */}
+      <section className="mb-10">
+        <SectionHeading
+          overline="Surfaces"
+          title="Workspace system"
+          hint="Premium portal layout pieces for command, inspector, timeline, and tactical surfaces."
+        />
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr]">
+          <div className="workspace-panel p-5">
+            <div className="quiet-label">Workspace panel</div>
+            <h3 className="mt-2 font-display text-xl font-bold">Primary operating surface</h3>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="inspector-panel p-3">
+                <div className="quiet-label">Inspector</div>
+                <div className="mt-2 font-display text-2xl font-bold text-accent">92%</div>
+              </div>
+              <div className="timeline-row">
+                <div className="quiet-label">Timeline row</div>
+                <div className="mt-1 text-sm font-semibold">Hoverable work item</div>
+              </div>
+            </div>
+          </div>
+          <TacticalField title="Tactical field" subtitle="Reusable goalkeeper visual" mode="builder" />
         </div>
       </section>
 

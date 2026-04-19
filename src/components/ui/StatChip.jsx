@@ -19,7 +19,7 @@ export default function StatChip({
       : "px-3 py-1.5 text-[11px]";
 
   const variantClasses = {
-    neutral: "bg-bg-card2 text-white/80 border-bg-border",
+    neutral: "bg-white/[0.04] text-white/80 border-white/[0.08]",
     success: "bg-success-soft text-success border-success-border",
     warning: "bg-warning-soft text-warning border-warning-border",
     danger: "bg-danger-soft text-danger border-danger-border",
@@ -29,7 +29,7 @@ export default function StatChip({
 
   return (
     <div
-      className={`inline-flex items-center gap-1.5 rounded-full border font-semibold ${sizeClasses} ${variantClasses}`}
+      className={`inline-flex items-center gap-1.5 rounded-lg border font-semibold ${sizeClasses} ${variantClasses}`}
     >
       {icon}
       <span className="font-bold tabular-nums">{value}</span>

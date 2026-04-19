@@ -25,6 +25,7 @@ import MentorFeed from "../components/MentorFeed";
 import MentorPushToggle from "../components/MentorPushToggle";
 import KeeperOnboardingModal from "../components/KeeperOnboardingModal";
 import { needsKeeperOnboarding } from "../lib/keeperProfile";
+import TacticalField from "../components/ui/TacticalField";
 import { DRILLS, CATEGORIES } from "../data/drills";
 import { useData } from "../context/DataContext";
 import { useAuth } from "../context/AuthContext";
@@ -154,19 +155,31 @@ function buildKeeperInsights({ currentPlayer, sessions, keeperNotes, allDrills }
   };
 }
 
-function StatCard({ icon: Icon, value, label, accent = "accent", gradient }) {
+function StatCard({ icon: Icon, value, label, accent = "accent" }) {
   return (
-    <Motion.div className="card p-5 relative overflow-hidden" variants={staggerItem} whileHover={softCardHover}>
-      <div
-        className="absolute inset-x-0 top-0 h-[3px]"
-        style={{ background: gradient }}
-      />
-      <div className={`w-10 h-10 rounded-lg ${STAT_ACCENTS[accent] ?? STAT_ACCENTS.accent} flex items-center justify-center mb-3`}>
-        <Icon size={20} />
+    <Motion.div className="metric-card p-4 md:p-5" variants={staggerItem} whileHover={softCardHover}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${STAT_ACCENTS[accent] ?? STAT_ACCENTS.accent}`}>
+          <Icon size={18} />
+        </div>
+        <span className="h-1.5 w-1.5 rounded-sm bg-white/20" />
       </div>
-      <div className="text-3xl font-black tracking-tight">{value}</div>
-      <div className="text-xs text-white/50 font-medium mt-0.5">{label}</div>
+      <div className="font-display text-3xl font-bold tracking-tight text-white">{value}</div>
+      <div className="mt-1 text-xs font-semibold text-white/45">{label}</div>
     </Motion.div>
+  );
+}
+
+function CommandSignal({ icon: Icon, label, value, detail, accent = false }) {
+  return (
+    <div className="data-row p-3.5">
+      <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-white/35">
+        <Icon size={13} className={accent ? "text-accent" : "text-white/35"} />
+        {label}
+      </div>
+      <div className="truncate font-display text-lg font-bold text-white">{value}</div>
+      <div className="mt-0.5 truncate text-xs text-white/45">{detail}</div>
+    </div>
   );
 }
 
@@ -190,8 +203,68 @@ export default function Dashboard({ setPage }) {
     : { page: "sessions", label: "View Sessions", icon: Calendar };
   const PrimaryIcon = primaryAction.icon;
 
+  const commandSignals = isKeeper
+    ? [
+        {
+          icon: Link2,
+          label: "Profile",
+          value: currentPlayer ? "Linked" : "Needs link",
+          detail: currentPlayer ? currentPlayer.name : "Coach roster match",
+          accent: !!currentPlayer,
+        },
+        {
+          icon: Calendar,
+          label: "Next",
+          value: keeperInsights.nextSession?.name ?? "No session",
+          detail: keeperInsights.nextSession ? formatDate(keeperInsights.nextSession.sessionDate) : "Nothing scheduled yet",
+          accent: !!keeperInsights.nextSession,
+        },
+        {
+          icon: MessageSquareText,
+          label: "Notes",
+          value: `${keeperInsights.needsReflection.length} open`,
+          detail: `${keeperInsights.reflections.length} saved reflections`,
+          accent: keeperInsights.needsReflection.length > 0,
+        },
+      ]
+    : [
+        {
+          icon: BookOpen,
+          label: "Library",
+          value: `${totalDrills} drills`,
+          detail: `${totalCategories} goalkeeper categories`,
+          accent: true,
+        },
+        {
+          icon: Calendar,
+          label: "Sessions",
+          value: `${savedSessions.length} saved`,
+          detail: "Plans and history",
+          accent: savedSessions.length > 0,
+        },
+        {
+          icon: Users,
+          label: "Roster",
+          value: `${players.length} players`,
+          detail: canEdit ? "Keeper management" : "Academy members",
+          accent: players.length > 0,
+        },
+      ];
+  const secondaryAction = canEdit
+    ? { page: "library", label: "Review Library", icon: BookOpen }
+    : { page: "sessions", label: "Open Sessions", icon: Calendar };
+  const SecondaryIcon = secondaryAction.icon;
+  const coachUpcoming = [...savedSessions]
+    .filter((s) => s.status === "planned" || !s.status)
+    .sort(byUpcomingDate);
+  const coachCompleted = [...savedSessions]
+    .filter((s) => s.status === "completed")
+    .sort(byRecentDate);
+  const nextCoachSession = coachUpcoming[0] ?? null;
+  const latestCoachSession = coachCompleted[0] ?? null;
+
   return (
-    <div>
+    <div className="space-y-6">
       {/* Mentor-E1: one-time keeper onboarding so Mentor messages can address
           them by their chosen name + reference their focus/idol/birthday. */}
       {showKeeperOnboarding && (
@@ -203,43 +276,67 @@ export default function Dashboard({ setPage }) {
 
       <PageHeader
         title={`Welcome back, ${memberName}`}
-        subtitle={isKeeper ? "Your goalkeeper training hub" : "Your goalkeeping academy command center"}
-      />
+        subtitle={isKeeper ? "Your keeper work, attendance, and notes in one place." : "Training operations, player work, and academy control in one place."}
+      >
+        <span className="chip chip-neutral">Staging twin</span>
+        <span className="chip chip-success">{canEdit ? "Coach mode" : "Read mode"}</span>
+      </PageHeader>
 
-      {/* Hero banner */}
-      <Motion.div className="academy-panel p-5 md:p-6 mb-5 md:mb-6" {...heroPanelMotion}>
-        <div className="relative z-10">
-          <div className="brand-overline mb-3">
-            <Sparkles size={14} />
-            Welcome to GalGro's Academy
+      <Motion.section className="command-surface p-5 md:p-6" {...heroPanelMotion}>
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_0.95fr] xl:items-stretch">
+          <div className="flex min-h-[220px] flex-col justify-between">
+            <div>
+              <div className="brand-overline mb-4">
+                <Sparkles size={13} />
+                Academy command
+              </div>
+              <h2 className="max-w-3xl font-display text-2xl font-bold tracking-tight text-white md:text-[38px] md:leading-tight">
+                {isKeeper
+                  ? currentPlayer
+                    ? "Your training picture is ready."
+                    : "Connect your roster profile."
+                  : canEdit
+                    ? "Build, review, and run the next keeper session."
+                    : "Review the academy work assigned to you."}
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/55 md:text-[15px]">
+                {isKeeper
+                  ? currentPlayer
+                    ? `${keeperUpcoming.length} upcoming sessions, ${keeperCompleted.length} completed, and ${attendanceCopy}.`
+                    : "Ask your coach to match your account name to your roster profile so your sessions appear here."
+                  : canEdit
+                    ? `${totalDrills} goalkeeper drills, ${players.length} rostered players, and ${savedSessions.length} saved sessions are ready for planning.`
+                    : `Browse ${totalDrills} goalkeeper drills and review your upcoming sessions.`}
+              </p>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+              <Motion.button onClick={() => setPage(primaryAction.page)} whileTap={softTap} className="btn btn-primary justify-center">
+                <PrimaryIcon size={16} />
+                {primaryAction.label}
+              </Motion.button>
+              <Motion.button onClick={() => setPage(secondaryAction.page)} whileTap={softTap} className="btn btn-secondary justify-center">
+                <SecondaryIcon size={16} />
+                {secondaryAction.label}
+              </Motion.button>
+            </div>
           </div>
-          <h2 className="font-display text-xl md:text-2xl font-bold mb-2">
-            {isKeeper
-              ? currentPlayer
-                ? "Track your keeper work"
-                : "Connect your roster profile"
-              : canEdit
-                ? "Build your next session"
-                : "Review your academy work"}
-          </h2>
-          <p className="text-white/60 text-sm max-w-xl mb-4">
-            {isKeeper
-              ? currentPlayer
-                ? `${keeperUpcoming.length} upcoming sessions, ${keeperCompleted.length} completed, and ${attendanceCopy}.`
-                : "Ask your coach to match your account name to your roster profile so your sessions appear here."
-              : canEdit
-                ? `Drag-and-drop from your library of ${totalDrills} professional drills, organized across ${totalCategories} categories.`
-                : `Browse ${totalDrills} goalkeeper drills and review your upcoming sessions.`}
-          </p>
-          <Motion.button onClick={() => setPage(primaryAction.page)} whileTap={softTap} className="btn btn-primary">
-            <PrimaryIcon size={16} />
-            {primaryAction.label}
-          </Motion.button>
-        </div>
-      </Motion.div>
 
-      {/* Stats */}
-      <Motion.div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6" variants={staggerContainer} initial="initial" animate="animate">
+          <TacticalField
+            title={isKeeper ? "Keeper map" : "Training map"}
+            subtitle={isKeeper ? "Your current session picture" : "Academy planning surface"}
+            mode="command"
+          />
+        </div>
+
+        <div className="cockpit-row mt-4 grid-cols-1 sm:grid-cols-3">
+            {commandSignals.map((signal) => (
+              <CommandSignal key={signal.label} {...signal} />
+            ))}
+        </div>
+      </Motion.section>
+
+      <Motion.div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4" variants={staggerContainer} initial="initial" animate="animate">
         {isKeeper ? (
           <>
             <StatCard
@@ -247,28 +344,24 @@ export default function Dashboard({ setPage }) {
               value={currentPlayer ? keeperUpcoming.length : "—"}
               label="Upcoming"
               accent="accent"
-              gradient="linear-gradient(90deg, #00ff87, transparent)"
             />
             <StatCard
               icon={CheckCircle2}
               value={currentPlayer ? keeperCompleted.length : "—"}
               label="Completed"
               accent="electric"
-              gradient="linear-gradient(90deg, #4488ff, transparent)"
             />
             <StatCard
               icon={UserCheck}
               value={currentPlayer && attendanceRate !== null ? `${attendanceRate}%` : "—"}
               label="Attendance"
               accent="orange"
-              gradient="linear-gradient(90deg, #ff6b35, transparent)"
             />
             <StatCard
               icon={BookOpen}
               value={totalDrills}
               label="Drills"
               accent="electric-purple"
-              gradient="linear-gradient(90deg, #a855f7, transparent)"
             />
           </>
         ) : (
@@ -278,28 +371,24 @@ export default function Dashboard({ setPage }) {
               value={totalDrills}
               label="Drills in library"
               accent="accent"
-              gradient="linear-gradient(90deg, #00ff87, transparent)"
             />
             <StatCard
               icon={Layers}
               value={totalCategories}
               label="Categories"
               accent="electric"
-              gradient="linear-gradient(90deg, #4488ff, transparent)"
             />
             <StatCard
               icon={Calendar}
               value={savedSessions.length}
               label="Saved sessions"
               accent="orange"
-              gradient="linear-gradient(90deg, #ff6b35, transparent)"
             />
             <StatCard
               icon={Users}
               value={players.length}
               label="Active players"
               accent="electric-purple"
-              gradient="linear-gradient(90deg, #a855f7, transparent)"
             />
           </>
         )}
@@ -344,6 +433,17 @@ export default function Dashboard({ setPage }) {
         />
       )}
 
+      {!isKeeper && (
+        <OperationsDesk
+          nextSession={nextCoachSession}
+          latestSession={latestCoachSession}
+          players={players}
+          savedSessions={savedSessions}
+          setPage={setPage}
+          canEdit={canEdit}
+        />
+      )}
+
       {/* Quick actions grid */}
       <Motion.div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4" variants={staggerContainer} initial="initial" animate="animate">
         <QuickActionCard
@@ -385,11 +485,89 @@ export default function Dashboard({ setPage }) {
   );
 }
 
+function OperationsDesk({ nextSession, latestSession, players, savedSessions, setPage, canEdit }) {
+  const activePlayers = players.length;
+  const plannedCount = savedSessions.filter((s) => s.status === "planned" || !s.status).length;
+
+  return (
+    <section className="workspace-panel p-4 md:p-5">
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="quiet-label">Operations desk</div>
+          <h3 className="mt-1 font-display text-xl font-bold text-white">Next decisions</h3>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Motion.button onClick={() => setPage("sessions")} whileTap={softTap} className="btn btn-secondary">
+            <Calendar size={14} />
+            Sessions
+          </Motion.button>
+          {canEdit && (
+            <Motion.button onClick={() => setPage("builder")} whileTap={softTap} className="btn btn-primary">
+              <Layers size={14} />
+              Build next
+            </Motion.button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.1fr_0.9fr_0.9fr]">
+        <div className="inspector-panel p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="quiet-label">Next session</div>
+            <span className="chip chip-success">{plannedCount} planned</span>
+          </div>
+          <h4 className="font-display text-2xl font-bold text-white">
+            {nextSession?.name ?? "No session scheduled"}
+          </h4>
+          <p className="mt-2 text-sm leading-relaxed text-white/50">
+            {nextSession
+              ? `${formatDate(nextSession.sessionDate)} · ${nextSession.blocks?.length ?? 0} drills · ${sessionMinutes(nextSession)} minutes`
+              : "Create the next keeper session and it will become the command center focus."}
+          </p>
+        </div>
+
+        <DecisionTile
+          icon={CheckCircle2}
+          label="Latest completed"
+          title={latestSession?.name ?? "No completed work yet"}
+          detail={latestSession ? formatDate(latestSession.sessionDate) : "Recaps will appear after sessions are marked completed."}
+          onClick={() => setPage("sessions")}
+        />
+        <DecisionTile
+          icon={Users}
+          label="Roster signal"
+          title={`${activePlayers} active keeper${activePlayers === 1 ? "" : "s"}`}
+          detail="Keep profiles linked so attendance and notes stay useful."
+          onClick={() => setPage("players")}
+        />
+      </div>
+    </section>
+  );
+}
+
+function DecisionTile({ icon: Icon, label, title, detail, onClick }) {
+  return (
+    <Motion.button
+      onClick={onClick}
+      whileHover={softCardHover}
+      whileTap={softTap}
+      className="timeline-row text-left"
+    >
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-accent">
+        <Icon size={17} />
+      </div>
+      <div className="quiet-label">{label}</div>
+      <div className="mt-1 truncate font-display text-lg font-bold text-white">{title}</div>
+      <p className="mt-1 text-xs leading-relaxed text-white/45">{detail}</p>
+    </Motion.button>
+  );
+}
+
 function KeeperPortal({ currentPlayer, insights, setPage }) {
   if (!currentPlayer) {
     return (
       <Motion.section className="mb-6" {...heroPanelMotion}>
-        <div className="card border-electric/25 bg-electric/5 p-5 md:p-6">
+        <div className="control-surface border-electric/25 p-5 md:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-3">
               <div className="h-11 w-11 rounded-lg border border-electric/30 bg-electric/10 flex items-center justify-center shrink-0">
@@ -499,7 +677,7 @@ function KeeperProfileSnapshot({ currentPlayer, insights, setPage }) {
             <div className="flex flex-wrap gap-2 sm:justify-end">
               <span className="tag border border-accent/20 bg-accent/10 text-accent">{currentPlayer.position}</span>
               {profileFacts.map((fact) => (
-                <span key={fact.label} className="tag border border-bg-border bg-bg-card2 text-white/60 normal-case tracking-normal">
+                <span key={fact.label} className="tag border border-white/[0.08] bg-white/[0.04] text-white/60 normal-case tracking-normal">
                   {fact.label}: {fact.value}
                 </span>
               ))}
@@ -556,7 +734,7 @@ function KeeperProfileSnapshot({ currentPlayer, insights, setPage }) {
 
 function KeeperProfileCard({ insights, setPage }) {
   return (
-    <Motion.div className="card p-5 lg:col-span-2" variants={staggerItem} whileHover={softCardHover}>
+    <Motion.div className="metric-card p-5 lg:col-span-2" variants={staggerItem} whileHover={softCardHover}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-xs font-bold uppercase tracking-wide text-white/35">Session pulse</div>
@@ -590,7 +768,7 @@ function KeeperProfileCard({ insights, setPage }) {
 
 function ProfileMiniMetric({ icon: Icon, label, value, detail, accent }) {
   return (
-    <div className="rounded-lg border border-bg-border bg-bg-soft/80 p-3">
+    <div className="data-row p-3">
       <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
         <Icon size={12} className={accent ? "text-accent" : "text-white/35"} />
         {label}
@@ -609,7 +787,7 @@ function ReflectionQueueCard({ insights, setPage }) {
   };
 
   return (
-    <Motion.div className="card p-5" variants={staggerItem} whileHover={softCardHover}>
+    <Motion.div className="metric-card p-5" variants={staggerItem} whileHover={softCardHover}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-bold uppercase tracking-wide text-white/35">Reflection queue</div>
@@ -623,7 +801,7 @@ function ReflectionQueueCard({ insights, setPage }) {
       {insights.needsReflection.length > 0 ? (
         <div className="space-y-3">
           {insights.needsReflection.map((session) => (
-            <div key={session.id} className="border-t border-bg-border pt-3 first:border-t-0 first:pt-0">
+            <div key={session.id} className="border-t border-white/[0.07] pt-3 first:border-t-0 first:pt-0">
               <div className="truncate text-sm font-semibold">{session.name}</div>
               <div className="mt-0.5 text-xs text-white/40">{formatDate(session.sessionDate)}</div>
             </div>
@@ -644,7 +822,7 @@ function ReflectionQueueCard({ insights, setPage }) {
 
 function TrainingFocusCard({ insights, focusTotal }) {
   return (
-    <Motion.div className="card p-5" variants={staggerItem} whileHover={softCardHover}>
+    <Motion.div className="metric-card p-5" variants={staggerItem} whileHover={softCardHover}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-bold uppercase tracking-wide text-white/35">Training focus</div>
@@ -681,7 +859,7 @@ function TrainingFocusCard({ insights, focusTotal }) {
 
 function RecentKeeperWorkCard({ insights, setPage }) {
   return (
-    <Motion.div className="card p-5 lg:col-span-2" variants={staggerItem} whileHover={softCardHover}>
+    <Motion.div className="metric-card p-5 lg:col-span-2" variants={staggerItem} whileHover={softCardHover}>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-xs font-bold uppercase tracking-wide text-white/35">Recent work</div>
@@ -698,7 +876,7 @@ function RecentKeeperWorkCard({ insights, setPage }) {
           {insights.recent.map((session) => {
             const completed = session.status === "completed";
             return (
-              <div key={session.id} className="flex items-start gap-3 border-t border-bg-border pt-3 first:border-t-0 first:pt-0">
+              <div key={session.id} className="flex items-start gap-3 border-t border-white/[0.07] pt-3 first:border-t-0 first:pt-0">
                 <span className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${completed ? "bg-emerald-400" : "bg-accent"}`} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{session.name}</div>
@@ -809,14 +987,17 @@ function QuickActionCard({ onClick, icon: Icon, iconClassName, title, detail, cl
   return (
     <Motion.button
       onClick={onClick}
-      className={`card card-hover p-5 text-left group ${className}`}
+      className={`metric-card group p-5 text-left ${className}`}
       variants={staggerItem}
       whileHover={softCardHover}
       whileTap={softTap}
     >
-      <Icon className={`${iconClassName} mb-3 transition-transform duration-200 group-hover:translate-x-0.5`} size={22} />
-      <div className="font-bold mb-1 transition-colors group-hover:text-accent">{title}</div>
-      <div className="text-xs text-white/50">{detail}</div>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Icon className={`${iconClassName} transition-transform duration-200 group-hover:translate-x-0.5`} size={21} />
+        <ArrowRight className="text-white/25 transition-colors group-hover:text-white/55" size={15} />
+      </div>
+      <div className="mb-1 font-display text-lg font-bold text-white transition-colors group-hover:text-accent">{title}</div>
+      <div className="text-xs leading-relaxed text-white/45">{detail}</div>
     </Motion.button>
   );
 }

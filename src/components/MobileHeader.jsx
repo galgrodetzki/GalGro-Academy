@@ -10,17 +10,15 @@ export default function MobileHeader({ onOpenSettings }) {
   const initials = name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? "").slice(0, 2).join("");
 
   return (
-    <header className="md:hidden fixed top-0 left-0 right-0 z-40 bg-bg-soft/95 backdrop-blur-lg border-b border-bg-border pt-[env(safe-area-inset-top)]">
+    <header className="fixed left-0 right-0 top-0 z-40 border-b border-white/[0.08] bg-[#090d15]/95 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
       <div className="flex items-center justify-between px-4 h-14">
-        {/* Logo */}
         <BrandMark className="gap-2.5" glyphClassName="h-9 w-9" textSize="text-[13px]" compact />
 
-        {/* Right actions */}
         <div className="flex items-center gap-1">
           <Motion.button
             onClick={onOpenSettings}
             whileTap={navItemTap}
-            className="p-2.5 rounded-lg text-white/60 hover:text-white active:bg-bg-card transition-colors"
+            className="rounded-lg p-2.5 text-white/55 transition-colors hover:text-white active:bg-white/[0.06]"
             aria-label="Settings"
           >
             <Settings size={20} />
@@ -28,13 +26,12 @@ export default function MobileHeader({ onOpenSettings }) {
           <Motion.button
             onClick={signOut}
             whileTap={navItemTap}
-            className="p-2.5 rounded-lg text-white/60 hover:text-red-400 active:bg-bg-card transition-colors"
+            className="rounded-lg p-2.5 text-white/55 transition-colors hover:text-red-300 active:bg-white/[0.06]"
             aria-label="Sign out"
           >
             <LogOut size={20} />
           </Motion.button>
-          {/* Avatar */}
-          <div className="w-8 h-8 rounded-lg border border-accent/30 bg-accent/10 flex items-center justify-center text-xs font-black text-accent ml-1">
+          <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-lg border border-accent/25 bg-accent/10 text-xs font-black text-accent">
             {initials}
           </div>
         </div>

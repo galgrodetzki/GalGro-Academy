@@ -298,7 +298,7 @@ export default function DrillDiagram({ diagram, className = "" }) {
 
   return (
     <div className={className}>
-      <div className="rounded-lg border border-bg-border overflow-hidden bg-bg-soft">
+    <div className="rounded-lg border border-white/[0.08] overflow-hidden bg-black/[0.14]">
         <svg
           viewBox="0 0 200 150"
           className="w-full h-auto block"

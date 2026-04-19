@@ -44,7 +44,7 @@ function MessageBubble({ message, onQueueSuggestion, onDecideApproval, busyKey }
         <div className={`rounded-lg border px-4 py-3 ${
           isUser
             ? "border-accent/30 bg-accent/10 text-white"
-            : "border-bg-border bg-bg-soft text-white/85"
+            : "border-white/[0.08] bg-black/[0.14] text-white/85"
         }`}>
           <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
             {isUser ? "Gal" : "Apollo"}
@@ -176,7 +176,7 @@ function ContextPackStatus({ context }) {
   if (!context?.packs?.length) return null;
 
   return (
-    <div className="rounded-lg border border-bg-border bg-bg-soft p-3">
+    <div className="data-row p-3">
       <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
           <Layers size={13} className="text-electric" />
@@ -190,7 +190,7 @@ function ContextPackStatus({ context }) {
         {context.packs.map((pack) => (
           <span
             key={pack.key}
-            className={`tag border normal-case tracking-normal ${packStatusStyles[pack.status] ?? "border-bg-border bg-bg-card2 text-white/50"}`}
+            className={`tag border normal-case tracking-normal ${packStatusStyles[pack.status] ?? "border-white/[0.08] bg-white/[0.04] text-white/50"}`}
             title={pack.summary}
           >
             {pack.title}: {pack.status}
@@ -322,7 +322,7 @@ export default function ApolloChat({ onAuditRecorded }) {
   };
 
   return (
-    <section className="card p-5">
+    <section className="control-surface p-5">
       <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-2">
@@ -341,7 +341,7 @@ export default function ApolloChat({ onAuditRecorded }) {
         </div>
       </div>
 
-      <div className="space-y-3 rounded-lg border border-bg-border bg-bg-card2 p-3">
+      <div className="space-y-3 rounded-lg border border-white/[0.08] bg-black/[0.12] p-3">
         <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
           {messages.map((message) => (
             <MessageBubble
@@ -354,7 +354,7 @@ export default function ApolloChat({ onAuditRecorded }) {
           ))}
           {status === "loading" && (
             <div className="flex justify-start">
-              <div className="rounded-lg border border-bg-border bg-bg-soft px-4 py-3 text-sm text-white/45">
+              <div className="data-row px-4 py-3 text-sm text-white/45">
                 Apollo is reading the context packs...
               </div>
             </div>

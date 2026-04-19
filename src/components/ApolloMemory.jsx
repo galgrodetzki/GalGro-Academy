@@ -33,7 +33,7 @@ function formatMemoryDate(value) {
 
 function MemoryBadge({ children }) {
   return (
-    <span className="tag border border-bg-border bg-bg-card2 normal-case tracking-normal text-white/55">
+    <span className="tag border border-white/[0.08] bg-white/[0.04] normal-case tracking-normal text-white/55">
       {children}
     </span>
   );
@@ -133,7 +133,7 @@ export default function ApolloMemory({ onMemoryChanged }) {
   };
 
   return (
-    <section className="card p-5">
+    <section className="control-surface p-5">
       <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-2">
@@ -162,7 +162,7 @@ export default function ApolloMemory({ onMemoryChanged }) {
       )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <form onSubmit={saveMemory} className="rounded-lg border border-bg-border bg-bg-card2 p-4">
+        <form onSubmit={saveMemory} className="data-row p-4">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <div className="text-sm font-bold text-white/85">{editing ? "Edit memory" : "Add memory"}</div>
@@ -175,7 +175,7 @@ export default function ApolloMemory({ onMemoryChanged }) {
                 type="button"
                 onClick={resetForm}
                 aria-label="Cancel memory edit"
-                className="rounded-lg border border-bg-border bg-bg-soft p-2 text-white/50 hover:text-white"
+                className="rounded-lg border border-white/[0.08] bg-black/[0.12] p-2 text-white/50 hover:text-white"
               >
                 <X size={14} />
               </button>
@@ -249,7 +249,7 @@ export default function ApolloMemory({ onMemoryChanged }) {
           </div>
         </form>
 
-        <div className="rounded-lg border border-bg-border bg-bg-card2 p-4">
+        <div className="data-row p-4">
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="text-sm font-bold text-white/85">Memory entries</div>
@@ -263,13 +263,13 @@ export default function ApolloMemory({ onMemoryChanged }) {
           </div>
 
           {status === "loading" && (
-            <div className="flex items-center justify-center rounded-lg border border-bg-border bg-bg-soft py-10">
+            <div className="data-row flex items-center justify-center py-10">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
             </div>
           )}
 
           {status !== "loading" && entries.length === 0 && (
-            <div className="rounded-lg border border-bg-border bg-bg-soft p-8 text-center">
+            <div className="data-row p-8 text-center">
               <div className="text-sm font-bold text-white/65">No Apollo memory yet</div>
               <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-white/40">
                 Add one stable decision or preference to make the next Apollo answer more grounded.
@@ -280,7 +280,7 @@ export default function ApolloMemory({ onMemoryChanged }) {
           {status !== "loading" && entries.length > 0 && (
             <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1">
               {entries.map((entry) => (
-                <div key={entry.id} className="rounded-lg border border-bg-border bg-bg-soft p-4">
+                <div key={entry.id} className="data-row p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="flex flex-wrap gap-2">
@@ -296,7 +296,7 @@ export default function ApolloMemory({ onMemoryChanged }) {
                         type="button"
                         onClick={() => startEdit(entry)}
                         aria-label={`Edit ${entry.title}`}
-                        className="rounded-lg border border-bg-border bg-bg-card2 p-2 text-white/50 transition-colors hover:border-electric/40 hover:text-electric"
+                        className="rounded-lg border border-white/[0.08] bg-white/[0.04] p-2 text-white/50 transition-colors hover:border-electric/40 hover:text-electric"
                       >
                         <Pencil size={14} />
                       </button>

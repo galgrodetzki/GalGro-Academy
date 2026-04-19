@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "../lib/supabase";
 import { Eye, EyeOff, LogIn, UserPlus, Ticket } from "lucide-react";
 import BrandMark from "../components/BrandMark";
+import TacticalField from "../components/ui/TacticalField";
 
 export default function Login() {
   const [mode, setMode] = useState("signin"); // "signin" | "signup"
@@ -99,20 +100,26 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-6 md:py-10">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-lg border border-bg-border bg-bg-soft/95 shadow-2xl lg:grid-cols-[1.08fr_0.92fr]">
-        <section className="academy-panel min-h-[280px] p-6 md:min-h-[620px] md:p-10">
+    <div className="app-chrome flex min-h-screen items-center justify-center px-4 py-6 md:py-10">
+      <div className="grid w-full max-w-6xl overflow-hidden rounded-lg border border-white/[0.08] bg-[#090d15]/92 shadow-[0_28px_90px_rgba(0,0,0,0.36)] lg:grid-cols-[1.08fr_0.92fr]">
+        <section className="command-surface min-h-[280px] rounded-none border-0 p-6 md:min-h-[620px] md:p-10">
           <div className="relative z-10 flex h-full flex-col justify-between">
             <BrandMark glyphClassName="h-12 w-12" textSize="text-xl" />
             <div className="max-w-md">
               <div className="brand-overline mb-4">Goalkeeper portal</div>
-              <h1 className="font-display text-3xl font-bold leading-tight tracking-tight md:text-5xl">
+              <h1 className="font-display text-3xl font-bold leading-tight tracking-tight text-white md:text-5xl">
                 Private academy workspace.
               </h1>
-              <p className="mt-4 max-w-sm text-sm leading-6 text-white/60">
+              <p className="mt-4 max-w-sm text-sm leading-6 text-white/58">
                 Sessions, keeper notes, and drill work stay inside GalGro's Academy.
               </p>
             </div>
+            <TacticalField
+              title="Academy OS"
+              subtitle="Plan, train, review"
+              mode="command"
+              className="my-6 hidden min-h-[220px] md:block"
+            />
             <div className="grid grid-cols-3 gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">
               <span className="border-t border-accent/40 pt-3">Plan</span>
               <span className="border-t border-electric/40 pt-3">Train</span>
@@ -121,7 +128,7 @@ export default function Login() {
           </div>
         </section>
 
-        <section className="p-5 md:p-8 lg:p-10">
+        <section className="bg-black/[0.08] p-5 md:p-8 lg:p-10">
           <div className="mb-6">
             <div className="brand-overline mb-3">Secure access</div>
             <h2 className="font-display text-2xl font-bold tracking-tight">
@@ -130,21 +137,21 @@ export default function Login() {
             <p className="mt-1 text-sm text-white/45">Private access only.</p>
           </div>
 
-          <div className="rounded-lg border border-bg-border bg-bg-card/90 p-5 md:p-6">
+          <div className="control-surface p-5 md:p-6">
           {/* Tab switcher */}
-          <div className="flex bg-bg-soft border border-bg-border rounded-lg p-1 mb-6">
+          <div className="tab-rail mb-6">
             <button
               onClick={() => { setMode("signin"); setError(""); setInfo(""); }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-colors ${
-                mode === "signin" ? "bg-accent text-black" : "text-white/50"
+              className={`tab-button ${
+                mode === "signin" ? "tab-button-active" : "tab-button-idle"
               }`}
             >
               <LogIn size={14} /> Sign in
             </button>
             <button
               onClick={() => { setMode("signup"); setError(""); setInfo(""); }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-colors ${
-                mode === "signup" ? "bg-accent text-black" : "text-white/50"
+              className={`tab-button ${
+                mode === "signup" ? "tab-button-active" : "tab-button-idle"
               }`}
             >
               <UserPlus size={14} /> Sign up
