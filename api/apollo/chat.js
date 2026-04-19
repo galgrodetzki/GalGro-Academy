@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
-import { generateText } from "ai";
+import { generateObject, generateText, jsonSchema } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { buildApolloContextPacks } from "./contextPacks.js";
 import { getBudgetStatus, recordTokenUsage } from "./_tokens.js";
+import { listActions } from "./actionExecutor.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL
   ?? process.env.VITE_SUPABASE_URL
@@ -162,6 +163,131 @@ function buildModelPrompt({ message, context, actor }) {
   ].join("\n\n");
 }
 
+// 13L: the set of registry actions Apollo Chat is allowed to SUGGEST the
+// head coach queue. Narrow allowlist by key, not by tier — being registered
+// isn't automatic permission to be offered via chat. Observe-tier actions
+// never appear here (they auto-run in the runner) and forbidden can't
+// register in the first place.
+const CHAT_SUGGESTABLE_KEYS = new Set([
+  "memory.create",
+  "access.revoke",
+  "proposal.retire_stale",
+]);
+
+function buildSuggestableActionsForPrompt() {
+  return listActions()
+    .filter((a) => CHAT_SUGGESTABLE_KEYS.has(a.key))
+    .map((a) => ({ key: a.key, label: a.label, tier: a.tier }));
+}
+
+// JSON schema the model fills in. Strict-ish: reply is required, suggestions
+// and references are optional arrays. actionKey is constrained to the
+// allowlist so the model literally cannot propose something off-menu.
+const APOLLO_CHAT_RESPONSE_SCHEMA = jsonSchema({
+  type: "object",
+  additionalProperties: false,
+  required: ["reply"],
+  properties: {
+    reply: {
+      type: "string",
+      description: "Plain-text answer for the head coach. Concise, operational, honest about gaps.",
+    },
+    suggestedActions: {
+      type: "array",
+      description: "Registry actions the head coach could queue for approval. Leave empty unless an action is clearly appropriate. NEVER queue an action yourself — only propose.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["actionKey", "label"],
+        properties: {
+          actionKey: {
+            type: "string",
+            enum: Array.from(CHAT_SUGGESTABLE_KEYS),
+          },
+          label: { type: "string", description: "Short human label for the suggestion chip." },
+          reasoning: { type: "string", description: "Why this action is worth queuing." },
+          payload: {
+            type: "object",
+            description: "Best-effort payload for the action (e.g. { profileId } for access.revoke, { title, body } for memory.create). Leave empty if you don't have the data from the context packs.",
+            additionalProperties: true,
+          },
+        },
+      },
+    },
+    referencedApprovalIds: {
+      type: "array",
+      description: "UUIDs of pending apollo_approvals the reply references (from the Approvals context pack). The UI will render approve/reject buttons for them.",
+      items: { type: "string" },
+    },
+  },
+});
+
+// 13L: build the prompt for structured output. We stream the allowed
+// suggestable actions into the prompt so the model sees their labels and
+// tiers — the schema enforces the key allowlist, the prompt explains intent.
+function buildStructuredPrompt({ message, context, actor }) {
+  const suggestable = buildSuggestableActionsForPrompt();
+  return [
+    `Head coach: ${actor.name}`,
+    `Question: ${message}`,
+    "Approved Apollo context packs:",
+    JSON.stringify({
+      version: context.version,
+      generatedAt: context.generatedAt,
+      summary: context.summary,
+      packs: context.packs,
+    }, null, 2),
+    "Registry actions you may SUGGEST (head coach still approves before anything runs):",
+    JSON.stringify(suggestable, null, 2),
+    "Rules for suggestedActions:",
+    "- Only suggest when there is clear evidence in the context packs (or the head coach asked for it).",
+    "- Payload fields should be sourced from the packs (e.g. profile IDs from the access pack, proposal IDs from the audit pack). If you don't have the data, leave payload empty — the head coach can fill it.",
+    "- Never claim you queued anything. You can only suggest; queuing requires the head coach to click the chip.",
+    "- For referencedApprovalIds, list pending approvals from the Approvals pack that your reply talks about (if any).",
+  ].join("\n\n");
+}
+
+// 13L: defensive cleanup of model-proposed suggestions. Drops anything off
+// the allowlist, truncates strings, coerces payload to an object. The
+// queue-action endpoint also enforces these — this is belt + suspenders.
+function sanitizeSuggestions(rawSuggestions) {
+  if (!Array.isArray(rawSuggestions)) return [];
+  return rawSuggestions
+    .map((raw) => {
+      if (!raw || typeof raw !== "object") return null;
+      if (!CHAT_SUGGESTABLE_KEYS.has(raw.actionKey)) return null;
+      return {
+        actionKey: raw.actionKey,
+        label: typeof raw.label === "string" ? raw.label.slice(0, 160) : raw.actionKey,
+        reasoning: typeof raw.reasoning === "string" ? raw.reasoning.slice(0, 500) : "",
+        payload: raw.payload && typeof raw.payload === "object" ? raw.payload : {},
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 4); // cap at 4 per reply so the UI doesn't get spammy
+}
+
+// 13L: only keep UUID-ish approval IDs the model may reference. We'll
+// re-fetch them server-side before responding to prove they're pending.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function sanitizeReferencedIds(rawIds) {
+  if (!Array.isArray(rawIds)) return [];
+  return rawIds
+    .filter((id) => typeof id === "string" && UUID_RE.test(id))
+    .slice(0, 8);
+}
+
+async function hydrateReferencedApprovals(supabase, ids) {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("apollo_approvals")
+    .select("id,action_key,action_label,autonomy_tier,risk_level,status,action_payload,created_at")
+    .in("id", ids)
+    .eq("status", "pending");
+  if (error || !Array.isArray(data)) return [];
+  return data;
+}
+
 async function buildApolloReply({ message, context, actor, supabase }) {
   const fallback = buildGroundedReply(message, context);
 
@@ -173,6 +299,8 @@ async function buildApolloReply({ message, context, actor, supabase }) {
       modelStatus: "No model auth is configured, so Apollo answered from deterministic context packs.",
       usage: null,
       budget: null,
+      suggestedActions: [],
+      referencedApprovals: [],
     };
   }
 
@@ -188,25 +316,30 @@ async function buildApolloReply({ message, context, actor, supabase }) {
       modelStatus: `Daily token budget (${budget.budget}) reached; Apollo served a grounded reply. Resets at UTC midnight.`,
       usage: null,
       budget,
+      suggestedActions: [],
+      referencedApprovals: [],
     };
   }
 
+  const systemPrompt = [
+    "You are Apollo, the command layer for GalGro's Academy.",
+    "Use only the approved context packs in the prompt. If the context does not support an answer, say what is missing.",
+    "Treat partial context packs as imperfect evidence. Name the gap if it affects the recommendation.",
+    "Be concise, operational, and honest. Do not claim background agents, model access, deployments, migrations, or live monitoring are active unless the context says so.",
+    "Never reveal secrets. Never recommend destructive or third-party security testing. Keep scheduled/background autonomy locked unless audit, scope, cost, and approval controls are ready.",
+    "You may propose registry actions via suggestedActions, but you NEVER execute or queue anything yourself — every action requires an explicit approval click from the head coach.",
+  ].join(" ");
+
   try {
-    const { text, usage } = await generateText({
+    const { object, usage } = await generateObject({
       model: openai(APOLLO_MODEL),
-      system: [
-        "You are Apollo, the command layer for GalGro's Academy.",
-        "Use only the approved context packs in the prompt. If the context does not support an answer, say what is missing.",
-        "Treat partial context packs as imperfect evidence. Name the gap if it affects the recommendation.",
-        "Be concise, operational, and honest. Do not claim background agents, model access, deployments, migrations, or live monitoring are active unless the context says so.",
-        "Never reveal secrets. Never recommend destructive or third-party security testing. Keep scheduled/background autonomy locked unless audit, scope, cost, and approval controls are ready.",
-      ].join(" "),
-      prompt: buildModelPrompt({ message, context, actor }),
+      schema: APOLLO_CHAT_RESPONSE_SCHEMA,
+      system: systemPrompt,
+      prompt: buildStructuredPrompt({ message, context, actor }),
     });
 
-    // 13M-1: record usage immediately after a successful call. Swallow write
-    // errors — we'd rather serve the reply than fail chat on an accounting
-    // blip. A warning in the logs is enough to diagnose later.
+    // 13M-1: record usage after success. Swallow errors — serving the reply
+    // matters more than perfect accounting.
     if (usage) {
       const record = await recordTokenUsage(supabase, { model: APOLLO_MODEL, usage });
       if (!record.ok) {
@@ -214,10 +347,17 @@ async function buildApolloReply({ message, context, actor, supabase }) {
       }
     }
 
+    const reply = typeof object?.reply === "string" && object.reply.trim()
+      ? object.reply.trim()
+      : fallback;
+    const suggestedActions = sanitizeSuggestions(object?.suggestedActions);
+    const referencedIds = sanitizeReferencedIds(object?.referencedApprovalIds);
+    const referencedApprovals = await hydrateReferencedApprovals(supabase, referencedIds);
+
     return {
       mode: "model",
       model: APOLLO_MODEL,
-      reply: text.trim() || fallback,
+      reply,
       modelStatus: "Model response generated through the server-side Apollo chat endpoint.",
       usage: usage ? {
         promptTokens: usage.promptTokens ?? 0,
@@ -225,17 +365,51 @@ async function buildApolloReply({ message, context, actor, supabase }) {
         totalTokens: usage.totalTokens ?? 0,
       } : null,
       budget,
+      suggestedActions,
+      referencedApprovals,
     };
   } catch (error) {
     console.error("Apollo model call failed", error);
-    return {
-      mode: "grounded_fallback",
-      model: APOLLO_MODEL,
-      reply: fallback,
-      modelStatus: "Model call failed safely, so Apollo answered from deterministic context packs.",
-      usage: null,
-      budget,
-    };
+    // 13L: if structured output choked, we try a plain text fallback so the
+    // head coach still gets SOMETHING from the model. No action suggestions
+    // on this path — we won't parse free text for actions.
+    try {
+      const { text, usage } = await generateText({
+        model: openai(APOLLO_MODEL),
+        system: systemPrompt,
+        prompt: buildModelPrompt({ message, context, actor }),
+      });
+      if (usage) {
+        const record = await recordTokenUsage(supabase, { model: APOLLO_MODEL, usage });
+        if (!record.ok) console.warn("Apollo token usage record failed", record.error);
+      }
+      return {
+        mode: "model_text_fallback",
+        model: APOLLO_MODEL,
+        reply: (text || "").trim() || fallback,
+        modelStatus: "Structured output failed; served a plain text model response without action suggestions.",
+        usage: usage ? {
+          promptTokens: usage.promptTokens ?? 0,
+          completionTokens: usage.completionTokens ?? 0,
+          totalTokens: usage.totalTokens ?? 0,
+        } : null,
+        budget,
+        suggestedActions: [],
+        referencedApprovals: [],
+      };
+    } catch (textError) {
+      console.error("Apollo text fallback also failed", textError);
+      return {
+        mode: "grounded_fallback",
+        model: APOLLO_MODEL,
+        reply: fallback,
+        modelStatus: "Model call failed safely, so Apollo answered from deterministic context packs.",
+        usage: null,
+        budget,
+        suggestedActions: [],
+        referencedApprovals: [],
+      };
+    }
   }
 }
 
@@ -326,6 +500,11 @@ async function handleChat(request) {
     // head coach as they approach the ceiling.
     usage: answer.usage,
     budget: answer.budget,
+    // 13L: structured outputs for the chat↔action bridge. UI renders
+    // suggestedActions as clickable chips (click → queue a pending approval)
+    // and referencedApprovals as inline approve/reject rows.
+    suggestedActions: answer.suggestedActions ?? [],
+    referencedApprovals: answer.referencedApprovals ?? [],
     audit,
     context: {
       version: context.version,

@@ -221,3 +221,33 @@ Drill proposals: 2
 - **13M-1 Token/cost counter** — still gated on real model-backed chat usage in production.
 
 ### Status: ✅ Apollo now produces weekly output autonomously
+
+## 13L Record — Chat ↔ Action bridge
+
+Apollo Chat can now propose and decide approvals inline. The inbox remains the canonical surface; chat is a convenience layer on top of the same registry.
+
+### What shipped
+- **`memory.create` action** (recommend tier). First action that originates from chat, not a department agent. Handler writes to `apollo_memory` with `metadata.source = "apollo_chat"`, slugged `memory_key` keyed by title + date. Same registry + approval gate as everything else.
+- **Structured chat output.** `/api/apollo/chat` now uses `generateObject` with a JSON schema: `{ reply, suggestedActions[], referencedApprovalIds[] }`. Suggestion `actionKey` is enum-constrained to an allowlist (`memory.create`, `access.revoke`, `proposal.retire_stale`); the model literally cannot propose anything else. Free-text fallback via `generateText` if structured output fails, but that path emits zero action suggestions.
+- **Queue mode on `/api/apollo/approvals`.** New `mode: "queue"` branch that turns a chat click into a pending `apollo_approvals` row. Server re-validates the action key is registered, the tier is `recommend` or `approval_required`, and dedups against existing pending rows with an identical payload. Head-coach auth still gates the endpoint.
+- **Chat UI chips + inline decision rows.** `ApolloChat.jsx` renders suggestion chips below each assistant reply (click → queues a pending approval, chip flips to "Queued") and pending approvals the reply references as inline approve/reject rows. Approve/reject goes through the standard `decide` endpoint.
+
+### Hard rules honored
+- **No auto-approve from chat.** Every action still requires an explicit click. The model suggests; the head coach queues; the head coach then approves.
+- **Server is the single write path.** The browser never constructs or writes approval rows directly — it hits the queue endpoint, which re-validates the registry + tier.
+- **Allowlist, not tier-based gating.** Being registered isn't permission to appear as a chat chip. `CHAT_SUGGESTABLE_KEYS` is a deliberate set; observe-tier actions never appear (they auto-run in the runner) and forbidden never registers.
+- **No new secrets.** Reuses the existing head-coach auth, server Supabase client, and `APOLLO_MODEL` / AI Gateway key.
+
+### Files touched
+- `api/apollo/actionExecutor.js` — registered `memory.create`.
+- `api/apollo/approvals.js` — added `handleQueue` + `mode: "queue"` branch.
+- `api/apollo/chat.js` — structured-output path, allowlist, sanitizers, hydrated approvals, text fallback.
+- `src/lib/apolloApprovals.js` — added `queueApprovalFromChat({ actionKey, payload, reasoning })`.
+- `src/components/ApolloChat.jsx` — suggestion chips, inline approval rows, state wiring for queue/decide.
+
+### What 13L did NOT touch
+- No schema change. `apollo_approvals` and `apollo_memory` already have the columns needed.
+- No auto-execution path. Every chat suggestion still lands in the pending queue first.
+- No tier escalation. `access.revoke` stays `approval_required`; `memory.create` stays `recommend`.
+
+### Status: ✅ Chat can propose and decide approvals; nothing runs without an explicit click

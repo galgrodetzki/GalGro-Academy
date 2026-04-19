@@ -347,6 +347,60 @@ registerAction({
   },
 });
 
+// Apollo Chat · promote a chat request into a durable memory entry.
+//   Tier: recommend. Reversible (head coach can delete memory rows), but
+//   still worth a conscious "yes" — memory influences future Apollo replies.
+//   Payload: { title, body, memoryType?, sensitivity?, metadata? }
+//
+// 13L: this is the first action queued from chat (not from a department
+// agent). It goes through the same registry + approvals gate, so the
+// entry path is identical to agent-proposed work.
+registerAction({
+  key: "memory.create",
+  label: "Save to Apollo memory",
+  tier: "recommend",
+  category: "housekeeping",
+  async handler(payload, ctx) {
+    const title = String(payload?.title ?? "").trim();
+    const body = String(payload?.body ?? "").trim();
+    if (!title) return { ok: false, error: "memory.create needs title" };
+    if (!body) return { ok: false, error: "memory.create needs body" };
+
+    const memoryType = String(payload?.memoryType ?? "project").trim() || "project";
+    const sensitivity = String(payload?.sensitivity ?? "internal").trim() || "internal";
+
+    // Deterministic-ish memory_key: slug of title + yyyy-mm-dd so the same
+    // title on different days coexists. Uniqueness isn't enforced by the DB
+    // schema, but keeping keys stable makes future reference/dedupe easier.
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60);
+    const today = new Date().toISOString().slice(0, 10);
+    const memoryKey = `chat-${slug || "note"}-${today}`;
+
+    const createdBy = ctx?.actor?.id ?? null;
+    const insert = {
+      memory_key: memoryKey,
+      memory_type: memoryType,
+      title: title.slice(0, 200),
+      body: body.slice(0, 4000),
+      sensitivity,
+      metadata: {
+        ...(payload?.metadata ?? {}),
+        source: "apollo_chat",
+      },
+      created_by: createdBy,
+      updated_by: createdBy,
+    };
+
+    const { data, error } = await ctx.supabase
+      .from("apollo_memory")
+      .insert(insert)
+      .select("id,memory_key")
+      .single();
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, result: { memoryId: data.id, memoryKey: data.memory_key, title: insert.title } };
+  },
+});
+
 // Drill Scout · queue a new drill proposal.
 //   Tier: observe. The agent_proposals row starts as "pending", which means
 //   Gal still has to approve it in the Agent Inbox before it enters the

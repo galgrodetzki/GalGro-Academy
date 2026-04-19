@@ -160,15 +160,17 @@ async function handlePost(request, auth) {
     return json({ error: "Invalid JSON body." }, 400);
   }
 
-  // 13J-1 + 13J-3: POST has three modes.
+  // 13J-1 + 13J-3 + 13L: POST has four modes.
   //   mode = "decide" (default) — head coach approves or rejects a pending row
   //   mode = "retry"            — re-execute an approved row whose execution errored
-  //   mode = "undo"             — queue an access.restore for a completed access.revoke
+  //   mode = "undo"              — queue an access.restore for a completed access.revoke
+  //   mode = "queue"             — 13L: queue a registry action from Apollo Chat
   const mode = body?.mode ?? "decide";
   if (mode === "retry") return handleRetry(body, auth);
   if (mode === "undo") return handleUndo(body, auth);
+  if (mode === "queue") return handleQueue(body, auth);
   if (mode === "decide") return handleDecide(body, auth);
-  return json({ error: "Unknown mode. Use 'decide', 'retry', or 'undo'." }, 400);
+  return json({ error: "Unknown mode. Use 'decide', 'retry', 'undo', or 'queue'." }, 400);
 }
 
 async function handleDecide(body, auth) {
@@ -437,6 +439,93 @@ async function handleUndo(body, auth) {
   }
 
   return json({ ok: true, status: "pending", approvalId: inserted.id });
+}
+
+// 13L: Queue a registry action from Apollo Chat.
+//
+// The head coach (via chat) selects a suggested action; this endpoint is the
+// single write path that turns that click into a pending apollo_approvals
+// row. It mirrors what department agents do — same registry, same tier
+// enforcement, same row shape. No back door.
+//
+// Hard rules:
+//   - Action key MUST be registered.
+//   - Action tier MUST be 'recommend' or 'approval_required' (observe runs
+//     automatically and has no approval row; forbidden is never queued).
+//   - The payload is stored verbatim; handlers validate it at execution time.
+//   - riskLevel defaults by tier if not provided.
+//   - Dedup: if an identical pending row exists (same actionKey + payload)
+//     we return the existing row instead of creating a duplicate.
+async function handleQueue(body, auth) {
+  const { actionKey, payload = {}, reasoning = "" } = body ?? {};
+  if (!actionKey || typeof actionKey !== "string") {
+    return json({ error: "Queue needs { actionKey, payload? }." }, 400);
+  }
+  if (payload && typeof payload !== "object") {
+    return json({ error: "payload must be an object." }, 400);
+  }
+
+  const tierInfo = resolveTier(actionKey);
+  if (!tierInfo.found) {
+    return json({ error: `Unknown action: ${actionKey}.` }, 400);
+  }
+  if (tierInfo.tier === "forbidden") {
+    return json({ error: `Action ${actionKey} is forbidden.` }, 403);
+  }
+  if (tierInfo.tier === "observe") {
+    return json({
+      error: `Action ${actionKey} is observe-tier and cannot be queued for approval.`,
+    }, 400);
+  }
+  if (!["recommend", "approval_required"].includes(tierInfo.tier)) {
+    return json({ error: `Tier ${tierInfo.tier} is not queueable.` }, 400);
+  }
+
+  const client = makeSupabaseClient(SUPABASE_ANON_KEY, auth.accessToken);
+
+  // Dedup against pending rows with the same action_key + payload. JSONB
+  // equality on `contains` in both directions catches exact-match payloads
+  // without being too strict.
+  if (payload && Object.keys(payload).length > 0) {
+    const { data: existing } = await client
+      .from("apollo_approvals")
+      .select("id,status")
+      .eq("action_key", actionKey)
+      .eq("status", "pending")
+      .contains("action_payload", payload)
+      .limit(1);
+    if (existing && existing.length > 0) {
+      return json({ ok: true, status: "pending", approvalId: existing[0].id, deduped: true });
+    }
+  }
+
+  const riskDefault = tierInfo.tier === "approval_required" ? "high" : "medium";
+
+  const { data: inserted, error: insertError } = await client
+    .from("apollo_approvals")
+    .insert({
+      // Chat-queued rows have no source finding — they originate from a
+      // head-coach chat message, not an agent run. finding_id is nullable.
+      finding_id: null,
+      action_key: actionKey,
+      action_label: tierInfo.label,
+      action_payload: payload,
+      autonomy_tier: tierInfo.tier,
+      risk_level: riskDefault,
+      status: "pending",
+      requested_by: "apollo_chat",
+      decision_notes: reasoning ? String(reasoning).slice(0, 500) : "",
+    })
+    .select("id,action_key,action_label,autonomy_tier,risk_level,status,action_payload,created_at")
+    .single();
+
+  if (insertError || !inserted) {
+    return json({
+      error: `Could not queue approval: ${insertError?.message ?? "unknown"}`,
+    }, 500);
+  }
+
+  return json({ ok: true, status: "pending", approvalId: inserted.id, approval: inserted });
 }
 
 async function handleRequest(request) {

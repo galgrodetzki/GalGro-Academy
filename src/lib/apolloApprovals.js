@@ -79,3 +79,23 @@ export async function retryApprovalExecution({ approvalId }) {
   }
   return payload;
 }
+
+// 13L: Queue a registry action from Apollo Chat. Server validates the action
+// key is registered + tier is recommend/approval_required. Returns the new
+// (or deduped existing) pending approval.
+export async function queueApprovalFromChat({ actionKey, payload, reasoning }) {
+  const token = await getAuthToken();
+  const response = await fetch("/api/apollo/approvals", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ mode: "queue", actionKey, payload, reasoning }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.error ?? `Could not queue approval (${response.status}).`);
+  }
+  return body;
+}
