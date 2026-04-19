@@ -93,7 +93,7 @@ export default function Sidebar({ page, setPage, onOpenSettings }) {
           <span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/35">Portal</span>
           <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-accent/85">
             <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(0,232,122,0.7)]" />
-            Staging
+            Live
           </span>
         </div>
       </div>
