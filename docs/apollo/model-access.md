@@ -149,8 +149,8 @@ Operations Status now shows whether the scheduled cron is actually firing.
 - `src/components/ApolloOperationsStatus.jsx` — new "Last cron run" section under the Heartbeat cell. Shows relative time ("3h ago" / "2d ago") + absolute timestamp + run status. Green if within 26h (normal daily cron with drift), warn otherwise. "never" when no scheduled row exists yet.
 - No schema change. No new secrets. Reads via the existing head-coach session client (RLS already grants select on `apollo_agent_runs` to head_coach).
 
-### What 13M still owes (deferred)
-- **13M-1 Token/cost counter** — deferred until model-backed chat is actually in use in production. Premature to track tokens we're not spending.
+### What 13M still owes (at 13M-2 time)
+- **13M-1 Token/cost counter** — deferred until model-backed chat is actually in use in production. Premature to track tokens we're not spending. (Shipped later — see 13M-1 Record below.)
 - **13M-3 Weekly digest** — deferred until a week of real 13J usage confirms whether an auto-generated weekly summary is actually wanted.
 
 ### Status: ✅ Cron visibility live
@@ -217,8 +217,8 @@ Drill proposals: 2
 - Idempotent per `memory_key` so the cron can fire freely without duplicates.
 - Reads scoped to the previous week only — no cross-week drift.
 
-### What 13M still owes (still deferred)
-- **13M-1 Token/cost counter** — still gated on real model-backed chat usage in production.
+### What 13M still owes (at 13M-3 time)
+- **13M-1 Token/cost counter** — still gated on real model-backed chat usage in production. (Shipped later — see 13M-1 Record below.)
 
 ### Status: ✅ Apollo now produces weekly output autonomously
 
@@ -251,3 +251,41 @@ Apollo Chat can now propose and decide approvals inline. The inbox remains the c
 - No tier escalation. `access.revoke` stays `approval_required`; `memory.create` stays `recommend`.
 
 ### Status: ✅ Chat can propose and decide approvals; nothing runs without an explicit click
+
+## 13M-1 Record — Daily Token Counter
+
+Apollo Chat now tracks how many tokens it spends per day and can soft-fail to grounded mode once a budget is crossed. Advisory, not billing — the goal is a guardrail against runaway loops, not invoice-grade accounting.
+
+### What shipped
+- **`apollo_token_usage` ledger.** One row per `(usage_date, model)` with `prompt_tokens`, `completion_tokens`, `total_tokens`, `call_count`, `first_recorded_at`, `updated_at`. UTC day key (matches the column default). Unique constraint on `(usage_date, model)` so the UPSERT path never doubles up a row.
+- **`api/apollo/_tokens.js`.** Single module owns: reading `APOLLO_DAILY_TOKEN_BUDGET` (unset or non-numeric = unlimited, fail-open), the `todayKeyUtc()` helper, `getTodayTotals` (summed across models), `getBudgetStatus`, and `recordTokenUsage` (read-then-upsert). Concurrent writers on the same day+model may lose one call's count — acceptable for an advisory counter.
+- **`api/apollo/chat.js`.** Checks `getBudgetStatus` before every model call. If today's total already crossed the budget, short-circuits to `handleGroundedChatFallback` with `mode: "grounded_budget_exhausted"` — the head coach still gets an answer, just without burning more tokens. After a successful model call, `recordTokenUsage` runs asynchronously; a write failure is logged but never blocks the reply.
+- **`api/apollo/status.js`.** Joins the ledger into the operations status payload: `{ usage: { promptTokens, completionTokens, totalTokens, callCount, models } }` + `{ budget, remaining, exhausted }`.
+- **`src/components/ApolloOperationsStatus.jsx`.** Renders used / budget ("unlimited" when env unset) / remaining, with a warn strip when exhausted.
+
+### Hard rules honored
+- RLS gated: head-coach SELECT / INSERT / UPDATE only. The chat endpoint is already head-coach-authed so the user-path policy is sufficient.
+- No new secrets. `APOLLO_DAILY_TOKEN_BUDGET` is an optional env var; absent = unlimited.
+- Fail-open on read: a DB blip on the status read never locks the head coach out of chat.
+- Budget is checked before the next call, not to abort one already in flight. So the *next* call is the one that gets blocked, not the call that tipped the counter over.
+
+### Files touched
+- `supabase/apollo_token_usage.sql` — NEW. Table + index + RLS policies.
+- `api/apollo/_tokens.js` — NEW. Budget, day key, totals, record.
+- `api/apollo/chat.js` — pre-call budget check + post-call usage recording + `grounded_budget_exhausted` fallback mode.
+- `api/apollo/status.js` — join usage into the status payload.
+- `src/components/ApolloOperationsStatus.jsx` — UI chip.
+
+### Status: ✅ Apollo chat is self-metered and soft-fails to grounded at the budget ceiling
+
+## 2026-04-18 — SQL migration backfill
+
+A repo audit surfaced five tables that shipped code-first without a matching `supabase/*.sql` file. All five existed in the live database — they'd been applied from the Supabase SQL editor but never committed. The repo is meant to be the source of truth for anyone re-creating the database from scratch (README §Supabase Security), so this was a genuine reproducibility gap.
+
+Captured live schema via the Supabase MCP (`information_schema.columns`, `pg_indexes`, `pg_policies`, `pg_constraint`, trigger definitions) and wrote matching DDL files:
+
+- `supabase/apollo_token_usage.sql` — Apollo 13M-1 ledger (see record above).
+- `supabase/mentor_feed.sql` — `game_days`, `mentor_templates`, `mentor_messages` with their updated_at triggers and RLS policies.
+- `supabase/push_subscriptions.sql` — Mentor-D Web Push endpoint ledger (self-scoped writes, head-coach read + prune).
+
+All three files use `create table if not exists` + `drop policy if exists` / `create policy` so they're safe to re-apply idempotently against the live DB. README updated to list every SQL file. No live DDL was changed — this is a documentation/reproducibility fix only.

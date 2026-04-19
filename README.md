@@ -77,6 +77,11 @@ supabase/
   keeper_features.sql
   keeper_profile_linking.sql
   access_revocation.sql
+  access_expiry.sql
+  apollo_foundation.sql
+  apollo_token_usage.sql
+  mentor_feed.sql
+  push_subscriptions.sql
 ```
 
 ## App Model
@@ -141,6 +146,12 @@ Keeper-facing notes use `supabase/keeper_features.sql` for the `keeper_session_n
 If the database already ran `keeper_features.sql` before the roster-account linking UI shipped, apply `supabase/keeper_profile_linking.sql` once to tighten the keeper note name-match fallback.
 
 Head-coach access revocation uses `supabase/access_revocation.sql` to add the `revoked` role and block revoked profiles from app data through RLS.
+
+Access expiry (`profiles.access_expires_on`) and the `is_head_coach()` / `can_edit_academy()` / `has_academy_access()` / `current_profile_role()` RLS helpers come from `supabase/access_expiry.sql`. Apply this after the baseline policy script; later migrations rely on these helpers.
+
+The Apollo command layer uses `supabase/apollo_foundation.sql` for the `apollo_agent_runs`, `apollo_findings`, `apollo_approvals`, and `apollo_memory` tables (all head-coach gated). `supabase/apollo_token_usage.sql` adds the daily chat-token ledger (Apollo 13M-1).
+
+The Mentor feed uses `supabase/mentor_feed.sql` for `game_days` (team calendar), `mentor_templates` (head-coach-authored prompts per trigger type), and `mentor_messages` (generated keeper-facing items). `supabase/push_subscriptions.sql` adds the Web Push subscription ledger that Mentor-D writes to.
 
 ## Product Roadmap
 
