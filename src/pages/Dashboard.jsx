@@ -278,7 +278,6 @@ export default function Dashboard({ setPage }) {
         title={`Welcome back, ${memberName}`}
         subtitle={isKeeper ? "Your keeper work, attendance, and notes in one place." : "Training operations, player work, and academy control in one place."}
       >
-        <span className="chip chip-neutral">Staging twin</span>
         <span className="chip chip-success">{canEdit ? "Coach mode" : "Read mode"}</span>
       </PageHeader>
 

@@ -19,7 +19,7 @@ import StatChip from "./ui/StatChip";
 import StatusDot from "./ui/StatusDot";
 import DepartmentSparkline from "./ui/DepartmentSparkline";
 import { SkeletonList } from "./ui/Skeleton";
-import TacticalField from "./ui/TacticalField";
+import CommandTopology from "./ui/CommandTopology";
 import { fetchApolloAuditHistory, fetchApolloSparklineData } from "../lib/apolloAudit";
 import {
   runApolloDepartmentReview,
@@ -376,11 +376,32 @@ export default function ApolloCommandCenter({
           </div>
 
           <div className="space-y-3">
-            <TacticalField
-              title="Apollo map"
+            {/* Command topology — each node reflects live department state:
+                failed latest run → warn, no run yet → idle, else ok.
+                Drill Scout also flips to warn when the approval queue has
+                pending proposals. */}
+            <CommandTopology
+              title="Command topology"
               subtitle="Departments report upward before action"
-              mode="command"
               className="min-h-[230px]"
+              departments={APOLLO_DEPARTMENTS
+                .filter((d) => deptKeyMap[d.name])
+                .map((d) => {
+                  const key = deptKeyMap[d.name];
+                  const runs = sparklines?.[key] ?? [];
+                  const latest = runs[runs.length - 1];
+                  let state = "idle";
+                  if (latest?.status === "failed") state = "warn";
+                  else if (latest) state = "ok";
+                  if (key === "drill_scout" && pendingProposalCount > 0) state = "warn";
+                  const shortLabel = {
+                    head_security: "Security",
+                    head_cyber:    "Cyber",
+                    qa_lead:       "QA",
+                    drill_scout:   "Scout",
+                  }[key] ?? d.name;
+                  return { key, label: shortLabel, state };
+                })}
             />
             <div className="inspector-panel p-3">
               <div className="mb-2 flex items-center gap-2 quiet-label">
