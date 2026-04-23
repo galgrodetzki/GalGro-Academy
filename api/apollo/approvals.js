@@ -160,17 +160,19 @@ async function handlePost(request, auth) {
     return json({ error: "Invalid JSON body." }, 400);
   }
 
-  // 13J-1 + 13J-3 + 13L: POST has four modes.
+  // 13J-1 + 13J-3 + 13L + 13O: POST has five modes.
   //   mode = "decide" (default) — head coach approves or rejects a pending row
   //   mode = "retry"            — re-execute an approved row whose execution errored
   //   mode = "undo"              — queue an access.restore for a completed access.revoke
   //   mode = "queue"             — 13L: queue a registry action from Apollo Chat
+  //   mode = "execute"           — 13O: run an observe-tier action directly (no approval row)
   const mode = body?.mode ?? "decide";
   if (mode === "retry") return handleRetry(body, auth);
   if (mode === "undo") return handleUndo(body, auth);
   if (mode === "queue") return handleQueue(body, auth);
+  if (mode === "execute") return handleExecute(body, auth);
   if (mode === "decide") return handleDecide(body, auth);
-  return json({ error: "Unknown mode. Use 'decide', 'retry', 'undo', or 'queue'." }, 400);
+  return json({ error: "Unknown mode. Use 'decide', 'retry', 'undo', 'queue', or 'execute'." }, 400);
 }
 
 async function handleDecide(body, auth) {
@@ -526,6 +528,56 @@ async function handleQueue(body, auth) {
   }
 
   return json({ ok: true, status: "pending", approvalId: inserted.id, approval: inserted });
+}
+
+// 13O: Run an observe-tier action directly, bypassing the approval queue.
+//
+// Observe-tier actions auto-execute from the runner already (finding lifecycle
+// flips, proposal.create, cyber.rls_audit). This mode gives the UI a parallel
+// path — so the head coach can click Resolve/Accept/Defer on an open finding
+// and have the status flip immediately without spawning a throwaway approval
+// row. No audit row is created because the action's own side effect (e.g.
+// apollo_findings.status update) IS the record.
+//
+// Hard rules:
+//   - Action key MUST be registered.
+//   - Action tier MUST be 'observe'. Anything else goes through `queue`.
+//   - Forbidden and unknown refuse with 4xx.
+//   - Payload is passed verbatim; handlers validate their own required fields.
+//   - Head coach auth is required (same as every other mode on this endpoint).
+async function handleExecute(body, auth) {
+  const { actionKey, payload = {} } = body ?? {};
+  if (!actionKey || typeof actionKey !== "string") {
+    return json({ error: "Execute needs { actionKey, payload? }." }, 400);
+  }
+  if (payload && typeof payload !== "object") {
+    return json({ error: "payload must be an object." }, 400);
+  }
+
+  const tierInfo = resolveTier(actionKey);
+  if (!tierInfo.found) {
+    return json({ error: `Unknown action: ${actionKey}.` }, 400);
+  }
+  if (tierInfo.tier === "forbidden") {
+    return json({ error: `Action ${actionKey} is forbidden.` }, 403);
+  }
+  if (tierInfo.tier !== "observe") {
+    return json({
+      error: `Action ${actionKey} is ${tierInfo.tier}-tier. Use mode='queue' to request approval.`,
+    }, 400);
+  }
+
+  const executionClient = getExecutionClient(auth.accessToken);
+  const result = await executeAction({
+    actionKey,
+    payload,
+    ctx: { supabase: executionClient, actor: auth.actor },
+  });
+
+  if (!result.ok) {
+    return json({ ok: false, error: result.error ?? "Unknown executor error" }, 200);
+  }
+  return json({ ok: true, result: result.result ?? {} });
 }
 
 async function handleRequest(request) {

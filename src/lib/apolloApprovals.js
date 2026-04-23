@@ -80,6 +80,34 @@ export async function retryApprovalExecution({ approvalId }) {
   return payload;
 }
 
+// 13O: Run an observe-tier action directly (no approval row). Server validates
+// the action is registered AND tier === "observe"; anything else must go
+// through queueApprovalFromChat + decideApproval instead. Used by the audit
+// history UI so the head coach can resolve/accept/defer an open finding with
+// a single click.
+export async function executeObserveAction({ actionKey, payload = {} }) {
+  const token = await getAuthToken();
+  const response = await fetch("/api/apollo/approvals", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ mode: "execute", actionKey, payload }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.error ?? `Could not execute action (${response.status}).`);
+  }
+  // Server returns { ok: true, result } on success OR { ok: false, error } on
+  // handler failure (still HTTP 200). Treat handler failure as throw so callers
+  // can surface the error inline.
+  if (body.ok === false) {
+    throw new Error(body.error ?? "Action handler failed.");
+  }
+  return body;
+}
+
 // 13L: Queue a registry action from Apollo Chat. Server validates the action
 // key is registered + tier is recommend/approval_required. Returns the new
 // (or deduped existing) pending approval.

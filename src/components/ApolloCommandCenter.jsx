@@ -21,6 +21,7 @@ import DepartmentSparkline from "./ui/DepartmentSparkline";
 import { SkeletonList } from "./ui/Skeleton";
 import CommandTopology from "./ui/CommandTopology";
 import { fetchApolloAuditHistory, fetchApolloSparklineData } from "../lib/apolloAudit";
+import { executeObserveAction } from "../lib/apolloApprovals";
 import {
   runApolloDepartmentReview,
   runApolloHeartbeatDryRun,
@@ -100,7 +101,12 @@ function StatusPill({ status, className = "" }) {
   );
 }
 
-function FindingRow({ finding }) {
+function FindingRow({ finding, onLifecycle, busy = false, error = "" }) {
+  // Buttons only surface for persisted findings (id present), currently open,
+  // and only when the parent wired up a handler. Live runner-output findings
+  // don't have ids yet — they'd 400 on the server.
+  const canActOnFinding = Boolean(onLifecycle) && finding.status === "open" && finding.id;
+
   return (
     <div className="data-row relative overflow-hidden">
       {/* Left severity bar */}
@@ -130,6 +136,43 @@ function FindingRow({ finding }) {
         )}
         {finding.recommendation && (
           <p className="mt-1 text-xs leading-relaxed text-white/35">{finding.recommendation}</p>
+        )}
+        {canActOnFinding && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onLifecycle(finding.id, "resolve")}
+              className="btn btn-ghost py-1 px-2.5 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
+              title="Flip to resolved — the recommended fix has been applied."
+            >
+              Resolve
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onLifecycle(finding.id, "accept")}
+              className="btn btn-ghost py-1 px-2.5 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
+              title="Accept and close — acknowledged, no action needed."
+            >
+              Accept
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onLifecycle(finding.id, "defer")}
+              className="btn btn-ghost py-1 px-2.5 text-[11px] disabled:cursor-not-allowed disabled:opacity-50"
+              title="Defer — revisit later."
+            >
+              Defer
+            </button>
+            {busy && (
+              <span className="text-[11px] text-white/40">Updating…</span>
+            )}
+            {error && (
+              <span className="text-[11px] text-danger">{error}</span>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -184,6 +227,54 @@ function ApolloAuditHistory({ auditState, selectedRunId, onSelectRun, onRefresh 
   const selectedRun = auditState.runs.find((r) => r.id === selectedRunId) ?? auditState.runs[0] ?? null;
   const loading = auditState.status === "loading";
   const refreshing = auditState.status === "refreshing";
+
+  // Per-finding lifecycle state for the Resolve/Accept/Defer buttons. Keyed
+  // by finding id. Cleared on every successful refresh since the chip itself
+  // reflects the new status.
+  const [lifecycle, setLifecycle] = useState({}); // { [findingId]: { busy, error, optimisticStatus } }
+
+  const actionByDecision = {
+    resolve: "finding.resolve",
+    accept: "finding.accept",
+    defer: "finding.defer",
+  };
+  const newStatusByDecision = {
+    resolve: "resolved",
+    accept: "accepted",
+    defer: "deferred",
+  };
+
+  const handleLifecycle = useCallback(async (findingId, decision) => {
+    const actionKey = actionByDecision[decision];
+    const optimisticStatus = newStatusByDecision[decision];
+    if (!actionKey || !findingId) return;
+
+    setLifecycle((s) => ({
+      ...s,
+      [findingId]: { busy: true, error: "", optimisticStatus },
+    }));
+    try {
+      await executeObserveAction({ actionKey, payload: { findingId } });
+      // Refresh to pick up the new status from the server. Keep the selected
+      // run so the user's view doesn't jump.
+      await onRefresh(selectedRun?.id ?? "");
+      setLifecycle((s) => {
+        const next = { ...s };
+        delete next[findingId];
+        return next;
+      });
+    } catch (err) {
+      setLifecycle((s) => ({
+        ...s,
+        [findingId]: {
+          busy: false,
+          error: err instanceof Error ? err.message : "Update failed.",
+          optimisticStatus: null,
+        },
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onRefresh, selectedRun?.id]);
 
   return (
     <section className="control-surface p-5">
@@ -270,9 +361,23 @@ function ApolloAuditHistory({ auditState, selectedRunId, onSelectRun, onRefresh 
                   </div>
                 </div>
                 <div className="mt-4 space-y-2">
-                  {selectedRun.findings.map((f) => (
-                    <FindingRow key={f.id} finding={f} />
-                  ))}
+                  {selectedRun.findings.map((f) => {
+                    const state = lifecycle[f.id] ?? {};
+                    // Show optimistic status while waiting for refresh so the
+                    // chip flips as soon as the click completes, not a beat later.
+                    const displayFinding = state.optimisticStatus
+                      ? { ...f, status: state.optimisticStatus }
+                      : f;
+                    return (
+                      <FindingRow
+                        key={f.id}
+                        finding={displayFinding}
+                        onLifecycle={handleLifecycle}
+                        busy={Boolean(state.busy)}
+                        error={state.error ?? ""}
+                      />
+                    );
+                  })}
                 </div>
               </Motion.div>
             ) : (
