@@ -83,80 +83,51 @@ export const APOLLO_APPROVAL_TIERS = [
   },
 ];
 
-// Ordered chronologically. Each entry is a real shipped phase — don't add
-// one until it's committed to main. Keep `detail` tight (≈ one sentence) so
-// the Build Sequence panel stays readable.
+// Thematic build arc, not a commit-by-commit log. Each entry rolls up a group
+// of related phases so the Build Sequence panel stays readable. When a new
+// theme is worth calling out, add it here; when it's just another commit
+// inside an existing theme, update the detail instead of appending.
 export const APOLLO_FOUNDATION_STEPS = [
   {
-    step: "13A",
+    step: "13A–B",
     title: "Command Foundation",
     status: "Complete",
-    detail: "Charter, command center, approval model, and audit schema are in place.",
-  },
-  {
-    step: "13B",
-    title: "Server-side Runner",
-    status: "Complete",
-    detail: "Protected runner with audit persistence. Manual and scheduled runs both active.",
+    detail: "Charter, command center, approval model, audit schema, and the protected server-side runner.",
   },
   {
     step: "13C",
     title: "Department Agents",
     status: "Active",
-    detail: "All six agents (Security, Cyber, QA, Drill Scout, Perf, Product) run live checks every heartbeat.",
+    detail: "All six agents — Security, Cyber, QA, Drill Scout, Perf, Product — run live checks every heartbeat.",
   },
   {
-    step: "13D",
+    step: "13D–E",
     title: "Apollo Chat",
     status: "Complete",
-    detail: "Head-coach chat with server-built context packs, editable memory, and full audit trail.",
-  },
-  {
-    step: "13E",
-    title: "Model Access",
-    status: "Complete",
-    detail: "Server-side model path armed via AI Gateway. No credentials in the browser bundle.",
+    detail: "Head-coach chat with context packs, editable memory, and server-only model access via AI Gateway.",
   },
   {
     step: "13F",
     title: "Background Heartbeat",
     status: "Complete",
-    detail: "Daily cron at 09:00 UTC. All gates armed: APOLLO_HEARTBEAT_ENABLED, CRON_SECRET, SUPABASE_SERVICE_ROLE_KEY.",
+    detail: "Daily cron at 09:00 UTC. APOLLO_HEARTBEAT_ENABLED, CRON_SECRET, SUPABASE_SERVICE_ROLE_KEY all armed.",
   },
   {
-    step: "13G–H",
+    step: "13G–K",
     title: "Action System",
-    status: "Complete",
-    detail: "Action registry with observe/recommend/approval tiers. Security, QA, and Drill Scout queue real actions.",
-  },
-  {
-    step: "13J",
-    title: "Approval Lifecycle",
-    status: "Complete",
-    detail: "Retry for failed executions, execution_result surfacing, and undo for access.revoke.",
-  },
-  {
-    step: "13K",
-    title: "Cyber Action",
-    status: "Complete",
-    detail: "cyber.rls_audit probes key tables with an anon client every heartbeat.",
+    status: "Active",
+    detail: "Registry with observe/recommend/approval tiers. Five agents queue real actions; lifecycle retry + undo + Cyber RLS probe shipped.",
   },
   {
     step: "13L",
     title: "Chat ↔ Action Bridge",
     status: "Complete",
-    detail: "Apollo suggests actions inline; head coach still clicks once to queue, once to approve.",
+    detail: "Apollo suggests actions inline; head coach clicks once to queue, once to approve. No back door.",
   },
   {
-    step: "13M",
-    title: "Observability & Budget",
-    status: "Complete",
-    detail: "Daily token counter + optional budget, last-cron chip, weekly digest memory entries.",
-  },
-  {
-    step: "13N",
-    title: "Full Roster Online",
+    step: "13M–O",
+    title: "Observability & Hygiene",
     status: "Active",
-    detail: "Perf Lead + Product Lead shipping findings. Status chips derived from sparkline data, not labels.",
+    detail: "Daily token budget, cron visibility chip, weekly digest, click-to-resolve on open findings.",
   },
 ];
