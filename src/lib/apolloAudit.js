@@ -56,7 +56,17 @@ function mapRun(row, findings) {
   };
 }
 
-const ACTIVE_AGENT_KEYS = ["head_security", "head_cyber", "qa_lead", "drill_scout"];
+// All 6 department agents run on every heartbeat and get their own run row
+// in apollo_agent_runs keyed by `agent_key` (via runner.persistAuditRun).
+// Keep this list in sync with DEPARTMENT_AGENT_PROFILES in departmentAgents.js.
+const ACTIVE_AGENT_KEYS = [
+  "head_security",
+  "head_cyber",
+  "qa_lead",
+  "drill_scout",
+  "perf_lead",
+  "product_lead",
+];
 
 export async function fetchApolloSparklineData() {
   const { data, error } = await supabase
@@ -83,9 +93,14 @@ export async function fetchApolloSparklineData() {
 }
 
 export async function fetchApolloAuditHistory({ limit = 8 } = {}) {
+  // Filter to the umbrella "apollo" run rows only. Per-agent rows exist for
+  // sparkline plotting but have no findings attached (findings are linked to
+  // the umbrella run_id). Skipping per-agent rows here keeps the audit
+  // history showing N full heartbeats instead of N/7 heartbeats.
   const { data: runs, error: runsError } = await supabase
     .from("apollo_agent_runs")
     .select(RUN_COLUMNS)
+    .eq("agent_key", "apollo")
     .order("created_at", { ascending: false })
     .limit(limit);
 

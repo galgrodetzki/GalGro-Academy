@@ -115,10 +115,13 @@ function buildRoadmapPack() {
 
 async function buildAuditPack(supabase) {
   const errors = [];
+  // Only the umbrella "apollo" runs — per-agent rows exist for sparklines
+  // but carry no findings on their own, so they'd dilute the chat audit pack.
   const { rows: runs, error: runsError } = await readRows(
     supabase
       .from("apollo_agent_runs")
       .select("id,agent_key,agent_name,run_type,status,scope,summary,created_at")
+      .eq("agent_key", "apollo")
       .order("created_at", { ascending: false })
       .limit(8),
     "apollo_agent_runs"

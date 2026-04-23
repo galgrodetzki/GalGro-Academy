@@ -289,3 +289,32 @@ Captured live schema via the Supabase MCP (`information_schema.columns`, `pg_ind
 - `supabase/push_subscriptions.sql` — Mentor-D Web Push endpoint ledger (self-scoped writes, head-coach read + prune).
 
 All three files use `create table if not exists` + `drop policy if exists` / `create policy` so they're safe to re-apply idempotently against the live DB. README updated to list every SQL file. No live DDL was changed — this is a documentation/reproducibility fix only.
+
+## 13N — Perf Lead + Product Lead online, per-agent run rows, live-derived status
+
+The Command Center had two `status: "Planned"` chips (Perf Lead, Product Lead) that were dead weight — they never ran, never produced findings, but took up space in the department rail. At the same time, every other agent's status chip in the UI was a hardcoded capability label rather than a real signal: if Drill Scout hadn't run in three days, the chip still said "Active." This phase closes both gaps and wires per-agent run persistence so the sparklines have something to plot for the two new agents.
+
+### What shipped
+
+- **Performance Lead agent (`perf_lead`).** Advisory only, no action attached. Reads `apollo_findings` / `apollo_agent_runs` row counts (warn at 500/400, high at 2000/1500), counts findings with `status = "open"` older than 21 days, and flags sessions whose `blocks` array exceeds 20. Positive-baseline finding when everything is within thresholds so the agent always produces at least one row.
+- **Product Lead agent (`product_lead`).** Advisory only, no action attached. Walks four product signals: draft sessions abandoned for >14 days, roster slots never appearing in any session (only fires when the roster is partially active — silent when zero sessions exist, since QA already tells that story), mentor message unread backlog (>20 = low-severity), and upcoming game days missing a prep session in the 2–7 day window before kickoff. Positive-baseline finding when all four are clean.
+- **Per-agent error containment.** The department runner now wraps each agent in its own try/catch. A throw in Product Lead no longer kills Drill Scout's output — the failed agent gets a single "blocked" finding plus a `status: "failed"` entry in the returned `perAgent` map, and the heartbeat continues.
+- **Per-agent `apollo_agent_runs` rows.** `persistAuditRun` in `api/apollo/runner.js` now writes one row per agent (keyed on the returned `perAgent` map) in addition to the umbrella `agent_key = "apollo"` row. Without this the sparklines in the Command Center had nothing to plot for the new agents — they'd stay blank forever. Per-agent INSERT failures are logged but non-fatal: umbrella run + findings are already persisted by that point.
+- **Sparkline/audit-history queries filter correctly.** `fetchApolloSparklineData` reads all six agent keys (`head_security`, `head_cyber`, `qa_lead`, `drill_scout`, `perf_lead`, `product_lead`); `fetchApolloAuditHistory` explicitly filters to `agent_key = "apollo"` so the audit list shows N full heartbeats instead of N/7 fragments. `buildAuditPack` in `contextPacks.js` applies the same filter so Apollo Chat sees the same history the UI does.
+- **Live-derived agent status.** `ApolloCommandCenter.jsx` no longer renders `dept.status` from `src/data/apollo.js`. A new `deriveAgentStatus(agentKey)` helper reads the latest sparkline entry: `Idle` = no runs yet, `Failed` = latest run status was failed, `Stale` = newest run older than 26h (one cron cycle + drift), `Active` = otherwise. Three new chip styles added (`Idle`, `Stale`, `Failed`) to carry the signal visually.
+- **`APOLLO_DEPARTMENTS` labels refreshed.** Every entry now says `status: "Active"` (it's a capability label now, not a signal — documented in a file-top comment), and the `scope` / `reports` copy was rewritten to describe what the agents actually do post-13H/13I/13K instead of the 13A-era "foundation" phrasing.
+
+### Hard rules honored
+- No new secrets. All new reads go through the existing service-role client the runner already uses.
+- No tier escalation. Perf Lead and Product Lead emit advisory findings only — no action keys registered, nothing auto-executes, nothing queues.
+- No schema change. Per-agent rows reuse the existing `apollo_agent_runs` table; `perAgent` is an in-memory map returned from `runDepartmentAgents`.
+
+### Files touched
+- `api/apollo/departmentAgents.js` — Perf Lead + Product Lead runners, `DEPARTMENT_AGENT_KEYS` export, per-agent try/catch harness, `safeCountWithFilter` helper, extended `portalData` (sessions, findings/runs counts, open findings, mentor unread, upcoming game days).
+- `api/apollo/runner.js` — passes `perAgent` through both heartbeat and department reports; writes per-agent rows in `persistAuditRun`.
+- `api/apollo/contextPacks.js` — audit pack filters to `agent_key = "apollo"`.
+- `src/lib/apolloAudit.js` — `ACTIVE_AGENT_KEYS` expanded to six; audit history filters to `agent_key = "apollo"`.
+- `src/data/apollo.js` — refreshed department copy + "every agent is Active" capability comment.
+- `src/components/ApolloCommandCenter.jsx` — new `deriveAgentStatus`, `Idle` / `Stale` / `Failed` chip styles, `perf_lead` / `product_lead` sparkline labels, header copy updated to "6 agents reporting."
+
+### Status: ✅ Six department agents reporting on every heartbeat with real-time status chips

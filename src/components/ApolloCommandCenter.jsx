@@ -39,6 +39,9 @@ const foundationStatusStyle = {
   Next:         "chip chip-info",
   Planned:      "chip chip-neutral",
   Queued:       "chip chip-neutral",
+  Idle:         "chip chip-neutral",
+  Stale:        "chip chip-warning",
+  Failed:       "chip chip-danger",
 };
 
 const severityStyle = {
@@ -338,13 +341,32 @@ export default function ApolloCommandCenter({
     }
   };
 
-  // Map APOLLO_DEPARTMENTS to their agent key for sparkline lookup
+  // Map APOLLO_DEPARTMENTS name → agent_key for sparkline lookup.
+  // Keep in sync with DEPARTMENT_AGENT_KEYS on the server side.
   const deptKeyMap = {
     "Head of Security": "head_security",
     "Head of Cyber":    "head_cyber",
     "QA Lead":          "qa_lead",
     "Drill Scout":      "drill_scout",
+    "Performance Lead": "perf_lead",
+    "Product Lead":     "product_lead",
   };
+
+  // Real-time agent status derived from the sparkline data — not the
+  // hardcoded label in src/data/apollo.js. "Active" means the most recent
+  // run completed; "Stale" means no run in the last 26h (one cron cycle
+  // plus drift); "Failed" means the latest run status was failed; "Idle"
+  // means the agent has never run yet.
+  const STALE_MS = 26 * 60 * 60 * 1000;
+  function deriveAgentStatus(agentKey) {
+    const runs = sparklines?.[agentKey] ?? [];
+    const latest = runs[runs.length - 1];
+    if (!latest) return "Idle";
+    if (latest.status === "failed") return "Failed";
+    const ageMs = Date.now() - new Date(latest.createdAt).getTime();
+    if (ageMs > STALE_MS) return "Stale";
+    return "Active";
+  }
 
   return (
     <div className="space-y-5">
@@ -399,6 +421,8 @@ export default function ApolloCommandCenter({
                     head_cyber:    "Cyber",
                     qa_lead:       "QA",
                     drill_scout:   "Scout",
+                    perf_lead:     "Perf",
+                    product_lead:  "Product",
                   }[key] ?? d.name;
                   return { key, label: shortLabel, state };
                 })}
@@ -415,9 +439,9 @@ export default function ApolloCommandCenter({
               <StatChip label="Audit runs" value={auditState.runs.length} variant="info" icon={<Activity size={11} />} />
             </div>
             <div className="mt-3 border-t border-white/[0.07] pt-3">
-              <div className="font-display text-lg font-bold text-white/90">Foundation only</div>
+              <div className="font-display text-lg font-bold text-white/90">6 agents reporting</div>
               <p className="mt-1 text-xs text-white/45">
-                No background execution, no external tools, no production changes delegated yet.
+                Daily heartbeat active. Observe-tier actions auto-run; recommend and approval-required actions queue in the inbox.
               </p>
             </div>
             </div>
@@ -443,12 +467,15 @@ export default function ApolloCommandCenter({
             const agentKey = deptKeyMap[dept.name];
             const deptRuns = sparklines?.[agentKey] ?? [];
             const lastRun = deptRuns[deptRuns.length - 1];
+            // Derived status beats the hardcoded capability label — if the
+            // last run was 3 days ago, "Active" would be lying.
+            const liveStatus = deriveAgentStatus(agentKey);
 
             return (
               <div key={dept.name} className="data-row p-4">
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="font-bold text-sm">{dept.name}</div>
-                  <StatusPill status={dept.status} />
+                  <StatusPill status={liveStatus} />
                 </div>
 
                 {/* Sparkline row */}

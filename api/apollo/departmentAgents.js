@@ -19,7 +19,21 @@ const DEPARTMENT_AGENT_PROFILES = [
     name: "Drill Scout",
     scope: "Proposal pipeline health, drill library coverage, and approval queue.",
   },
+  {
+    key: "perf_lead",
+    name: "Performance Lead",
+    scope: "Table growth, finding accumulation, and session-size outliers.",
+  },
+  {
+    key: "product_lead",
+    name: "Product Lead",
+    scope: "Workflow drop-off, roster activation, and keeper engagement signals.",
+  },
 ];
+
+// Map agent name → key so the runner can attribute per-agent run rows
+// without re-parsing the name at write time.
+export const DEPARTMENT_AGENT_KEYS = DEPARTMENT_AGENT_PROFILES.map((p) => p.key);
 
 function finding({
   agent,
@@ -671,17 +685,303 @@ function runDrillScoutAgent(portalData) {
   return findings;
 }
 
+// ── Performance Lead ──────────────────────────────────────────────────────
+// Watches the things that make the portal feel slow: audit tables growing
+// without bound, open findings piling up in the inbox, session.blocks arrays
+// that render/print slowly. All advisory — no actions attached yet.
+function runPerformanceAgent(portalData) {
+  const agent = DEPARTMENT_AGENT_PROFILES[4];
+  const findings = [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Thresholds are rough and intentionally generous. Triggering them at all
+  // should feel like real volume, not test-data noise.
+  const FINDINGS_WARN = 500;
+  const FINDINGS_HIGH = 2000;
+  const RUNS_WARN = 400;
+  const RUNS_HIGH = 1500;
+  const OPEN_FINDING_STALE_DAYS = 21;
+  const SESSION_BLOCKS_WARN = 20;
+
+  // Apollo audit table growth — the daily heartbeat and every action outcome
+  // lands here. Left unchecked this becomes the slowest query on the portal.
+  const findingsCount = portalData.findingsCount.count ?? 0;
+  const findingsError = portalData.findingsCount.error;
+  if (findingsError) {
+    findings.push(finding({
+      agent,
+      title: "Could not read apollo_findings row count",
+      severity: "low",
+      category: "audit_growth",
+      detail: `Count query failed: ${findingsError}. Performance baseline can't be established.`,
+      recommendation: "Check RLS on apollo_findings — Performance Lead needs head-coach-gated read access.",
+    }));
+  } else if (findingsCount >= FINDINGS_HIGH) {
+    findings.push(finding({
+      agent,
+      title: `apollo_findings has ${findingsCount} rows`,
+      severity: "medium",
+      category: "audit_growth",
+      detail: `Past the high threshold (${FINDINGS_HIGH}). Inbox queries and sparkline lookups run over this table — growth is silent but compounds.`,
+      recommendation: "Consider a retention policy or periodic archival for info-severity findings older than 30 days.",
+    }));
+  } else if (findingsCount >= FINDINGS_WARN) {
+    findings.push(finding({
+      agent,
+      title: `apollo_findings has ${findingsCount} rows (warn threshold: ${FINDINGS_WARN})`,
+      severity: "low",
+      category: "audit_growth",
+      detail: "Not an incident yet, but trending. Worth watching the next few heartbeats.",
+      recommendation: "Keep an eye on it. Retention policy becomes worth it around 2k rows.",
+    }));
+  } else {
+    findings.push(finding({
+      agent,
+      title: `Audit volume healthy — ${findingsCount} findings recorded`,
+      category: "audit_growth",
+      detail: `Well below the ${FINDINGS_WARN}-row warn threshold. No retention pressure yet.`,
+      recommendation: "Re-check after a few weeks of daily cron runs.",
+    }));
+  }
+
+  // apollo_agent_runs — every heartbeat + every per-agent run lives here.
+  const runsCount = portalData.runsCount.count ?? 0;
+  if (!portalData.runsCount.error) {
+    if (runsCount >= RUNS_HIGH) {
+      findings.push(finding({
+        agent,
+        title: `apollo_agent_runs has ${runsCount} rows`,
+        severity: "medium",
+        category: "audit_growth",
+        detail: `Past ${RUNS_HIGH} rows. Audit-history pagination and per-agent sparklines both scan this table.`,
+        recommendation: "Consider archiving runs older than 90 days to a separate table if inbox/sparkline loads feel slow.",
+      }));
+    } else if (runsCount >= RUNS_WARN) {
+      findings.push(finding({
+        agent,
+        title: `apollo_agent_runs has ${runsCount} rows (warn threshold: ${RUNS_WARN})`,
+        severity: "low",
+        category: "audit_growth",
+        detail: "Growth is normal at the daily cron cadence. Noting for visibility.",
+        recommendation: "Revisit retention if the number doubles in the next month.",
+      }));
+    }
+  }
+
+  // Findings with status=open older than N days — these never got acted on
+  // and show up on every audit-history page, slowing the render.
+  const staleOpen = (portalData.openFindings.rows ?? []).filter((row) => {
+    if (row.status !== "open") return false;
+    const ageDays = Math.floor(
+      (new Date(today) - new Date(row.created_at)) / (1000 * 60 * 60 * 24)
+    );
+    return ageDays > OPEN_FINDING_STALE_DAYS;
+  });
+  if (staleOpen.length > 0) {
+    findings.push(finding({
+      agent,
+      title: `${staleOpen.length} finding${staleOpen.length > 1 ? "s have" : " has"} been open for over ${OPEN_FINDING_STALE_DAYS} days`,
+      severity: staleOpen.length > 10 ? "medium" : "low",
+      category: "finding_backlog",
+      detail: "Findings left in `open` status keep rendering in the audit history with full body text. Accepting or resolving them trims the payload.",
+      recommendation: "Triage old findings in Admin → Apollo → Audit runs, or resolve them from the Inbox.",
+    }));
+  }
+
+  // Oversized sessions — huge block arrays slow both render and PDF export.
+  const sessionRows = portalData.sessionsData.rows ?? [];
+  if (sessionRows.length > 0) {
+    const oversized = sessionRows
+      .map((s) => ({ id: s.id, name: s.name, blockCount: Array.isArray(s.blocks) ? s.blocks.length : 0 }))
+      .filter((s) => s.blockCount > SESSION_BLOCKS_WARN)
+      .sort((a, b) => b.blockCount - a.blockCount);
+    if (oversized.length > 0) {
+      const top = oversized[0];
+      findings.push(finding({
+        agent,
+        title: `${oversized.length} session${oversized.length > 1 ? "s" : ""} over ${SESSION_BLOCKS_WARN} blocks`,
+        severity: "low",
+        category: "render_cost",
+        detail: `Largest: "${top.name}" with ${top.blockCount} blocks. Big block arrays slow the builder, MySessions render, and PDF export.`,
+        recommendation: "Consider splitting long sessions into two, or trimming blocks that are rarely used.",
+      }));
+    }
+  }
+
+  return findings;
+}
+
+// ── Product Lead ──────────────────────────────────────────────────────────
+// Watches portal health from a product angle: are sessions actually being
+// run, are players in the roster showing up, are keepers engaging with
+// Mentor content. All advisory — no actions attached yet.
+function runProductAgent(portalData) {
+  const agent = DEPARTMENT_AGENT_PROFILES[5];
+  const findings = [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  const sessionRows = portalData.sessionsData.rows ?? [];
+  const playerRows = portalData.players.rows ?? [];
+
+  // Draft sessions that never progressed — forgotten plans.
+  if (sessionRows.length > 0) {
+    const draftStale = sessionRows.filter((s) => {
+      if (s.status !== "draft") return false;
+      const ageDays = Math.floor(
+        (new Date(today) - new Date(s.created_at)) / (1000 * 60 * 60 * 24)
+      );
+      return ageDays > 14;
+    });
+    if (draftStale.length > 0) {
+      findings.push(finding({
+        agent,
+        title: `${draftStale.length} draft session${draftStale.length > 1 ? "s" : ""} abandoned`,
+        severity: "low",
+        category: "workflow",
+        detail: `Sessions saved as draft >14 days ago without being marked completed: ${draftStale.map((s) => `"${s.name}"`).slice(0, 5).join(", ")}${draftStale.length > 5 ? "…" : ""}.`,
+        recommendation: "Complete the ones you actually ran (session → completed) or delete drafts you no longer want.",
+      }));
+    }
+  }
+
+  // Roster activation — players who've never appeared in any session.
+  if (playerRows.length > 0 && sessionRows.length > 0) {
+    const usedPlayerIds = new Set();
+    for (const s of sessionRows) {
+      for (const pid of s.player_ids ?? []) usedPlayerIds.add(pid);
+    }
+    const dormant = playerRows.filter((p) => !usedPlayerIds.has(p.id));
+    if (dormant.length > 0 && dormant.length < playerRows.length) {
+      // Only warn when SOME players are active — if no one is used, that's
+      // the "no sessions" story already told by QA.
+      findings.push(finding({
+        agent,
+        title: `${dormant.length} roster slot${dormant.length > 1 ? "s have" : " has"} never been used in a session`,
+        severity: "low",
+        category: "roster_activation",
+        detail: `Players never added to any session: ${dormant.map((p) => p.name).slice(0, 5).join(", ")}${dormant.length > 5 ? "…" : ""}.`,
+        recommendation: "If a player has left the program, remove them from the roster in Admin → Players. Otherwise include them in the next session.",
+      }));
+    }
+  } else if (playerRows.length === 0) {
+    findings.push(finding({
+      agent,
+      title: "Roster is empty",
+      severity: "low",
+      category: "roster_activation",
+      detail: "Zero players in the roster. Session builder can still run drills, but there's no attendance or keeper-portal to populate.",
+      recommendation: "Add players in Admin → Players when the squad list is ready.",
+    }));
+  }
+
+  // Mentor engagement — unread messages piling up means keepers aren't reading.
+  if (portalData.mentorUnread.count !== null) {
+    const unread = portalData.mentorUnread.count;
+    if (unread > 20) {
+      findings.push(finding({
+        agent,
+        title: `${unread} mentor messages unread`,
+        severity: "low",
+        category: "keeper_engagement",
+        detail: "Mentor messages are accumulating without being read. Either keepers aren't opening the portal, or the message copy isn't landing.",
+        recommendation: "Check whether keepers are signed in at all. If they are, revisit mentor_templates — the copy may be skippable.",
+      }));
+    } else if (unread > 0) {
+      findings.push(finding({
+        agent,
+        title: `${unread} mentor message${unread > 1 ? "s" : ""} unread`,
+        category: "keeper_engagement",
+        detail: "Normal backlog for an active keeper roster.",
+        recommendation: "No action needed. Watch if this crosses 20.",
+      }));
+    }
+  }
+
+  // Upcoming game day with no prep session — classic "I forgot to plan" signal.
+  const upcomingGames = portalData.gameDays.rows ?? [];
+  if (upcomingGames.length > 0) {
+    const unprepped = upcomingGames.filter((gd) => {
+      const gameDate = new Date(gd.game_date);
+      const twoDaysBefore = new Date(gameDate);
+      twoDaysBefore.setDate(twoDaysBefore.getDate() - 2);
+      // Is there any session scheduled between (gameDate - 7d) and gameDate?
+      const prepped = sessionRows.some((s) => {
+        if (!s.session_date) return false;
+        const sDate = new Date(s.session_date);
+        const sevenDaysBefore = new Date(gameDate);
+        sevenDaysBefore.setDate(sevenDaysBefore.getDate() - 7);
+        return sDate >= sevenDaysBefore && sDate <= twoDaysBefore;
+      });
+      return !prepped;
+    });
+    if (unprepped.length > 0) {
+      findings.push(finding({
+        agent,
+        title: `${unprepped.length} upcoming game day${unprepped.length > 1 ? "s have" : " has"} no prep session in the week prior`,
+        severity: "low",
+        category: "coach_operations",
+        detail: `Game days without a session 2–7 days before: ${unprepped.map((gd) => `${gd.opponent} on ${gd.game_date}`).slice(0, 3).join(", ")}${unprepped.length > 3 ? "…" : ""}.`,
+        recommendation: "Build a keeper-focused session in the week before each game. Apollo will link them automatically via source_game_day_id on Mentor messages.",
+      }));
+    }
+  }
+
+  // Positive baseline so the agent always produces something — otherwise the
+  // "no findings" case reads as "agent didn't run."
+  if (findings.length === 0) {
+    findings.push(finding({
+      agent,
+      title: "Portal workflow looks healthy",
+      category: "workflow",
+      detail: "No stalled drafts, dormant roster slots, unread-message backlog, or un-prepped game days.",
+      recommendation: "Keep coaching. Check back after the next training cycle.",
+    }));
+  }
+
+  return findings;
+}
+
 export async function runDepartmentAgents({ supabase, config }) {
-  // Fetch live portal data for all agents in parallel
-  const [profiles, players, proposals] = await Promise.all([
+  // Fetch live portal data for all agents in parallel. Extended for Perf
+  // Lead (audit table counts, open findings, session block sizes) and
+  // Product Lead (session details, mentor engagement, upcoming games).
+  const [profiles, players, proposals, sessionsData, openFindings, mentorUnread, gameDays] = await Promise.all([
     safeFetch(supabase, "profiles", "id, name, role, access_expires_on"),
     safeFetch(supabase, "players", "id, name, profile_id"),
     safeFetch(supabase, "agent_proposals", "id, name, status, created_at"),
+    safeFetch(supabase, "sessions", "id, name, status, session_date, player_ids, blocks, created_at"),
+    safeFetch(supabase, "apollo_findings", "id, status, created_at"),
+    safeCountWithFilter(supabase, "mentor_messages", (q) => q.eq("status", "unread")),
+    safeFetch(supabase, "game_days", "id, opponent, game_date"),
   ]);
-  const sessionsCount = await safeCount(supabase, "sessions");
+
+  const [sessionsCount, findingsCount, runsCount] = await Promise.all([
+    safeCount(supabase, "sessions"),
+    safeCount(supabase, "apollo_findings"),
+    safeCount(supabase, "apollo_agent_runs"),
+  ]);
   const sessions = { ...sessionsCount, rows: [] };
 
-  const portalData = { profiles, players, sessions, proposals };
+  // Product Lead only cares about upcoming games — filter client-side rather
+  // than burning a new query with a date predicate.
+  const today = new Date().toISOString().slice(0, 10);
+  const upcomingGameDays = {
+    ...gameDays,
+    rows: (gameDays.rows ?? []).filter((g) => g.game_date >= today),
+  };
+
+  const portalData = {
+    profiles,
+    players,
+    sessions,
+    proposals,
+    sessionsData,
+    findingsCount,
+    runsCount,
+    openFindings,
+    mentorUnread,
+    gameDays: upcomingGameDays,
+  };
 
   const tableChecks = [
     { tableName: "profiles", count: profiles.rows.length, error: profiles.error },
@@ -690,18 +990,61 @@ export async function runDepartmentAgents({ supabase, config }) {
     { tableName: "agent_proposals", count: proposals.rows.length, error: proposals.error },
   ];
 
-  const findings = [
-    ...runSecurityAgent(config, portalData),
-    ...runCyberAgent(config, portalData),
-    ...runQaAgent(config, portalData),
-    // DrillScout is now synchronous — its side effects go through the
-    // action executor via the observe-tier `proposal.create` action.
-    ...runDrillScoutAgent(portalData),
+  // Each agent is wrapped so a throw in one department doesn't kill the run.
+  // Per-agent errors surface as a single "agent blocked" finding and the
+  // runner still writes a run row for that agent with status=failed.
+  const agentRunners = [
+    ["head_security", () => runSecurityAgent(config, portalData)],
+    ["head_cyber",    () => runCyberAgent(config, portalData)],
+    ["qa_lead",       () => runQaAgent(config, portalData)],
+    ["drill_scout",   () => runDrillScoutAgent(portalData)],
+    ["perf_lead",     () => runPerformanceAgent(portalData)],
+    ["product_lead",  () => runProductAgent(portalData)],
   ];
+
+  const findings = [];
+  const perAgent = {};
+  for (const [key, fn] of agentRunners) {
+    const profile = DEPARTMENT_AGENT_PROFILES.find((p) => p.key === key);
+    try {
+      const agentFindings = fn();
+      findings.push(...agentFindings);
+      perAgent[key] = { status: "completed", findingCount: agentFindings.length };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      findings.push({
+        agentKey: key,
+        agentName: profile?.name ?? key,
+        title: `${profile?.name ?? key} failed during heartbeat`,
+        severity: "medium",
+        category: "agent_failure",
+        detail: `The agent threw before producing findings: ${message}`,
+        recommendation: "Check server logs for the stack. The other agents still ran.",
+        approvalRequired: false,
+        action: null,
+      });
+      perAgent[key] = { status: "failed", findingCount: 0, error: message };
+    }
+  }
 
   return {
     agents: DEPARTMENT_AGENT_PROFILES,
     tableChecks,
     findings,
+    perAgent,
+  };
+}
+
+// safeCount + .filter builder — lets us count rows matching a predicate
+// without fetching them. Used for the mentor_messages unread total.
+async function safeCountWithFilter(supabase, tableName, applyFilter) {
+  if (!supabase) return { tableName, count: null, error: "No read client is configured." };
+  let q = supabase.from(tableName).select("*", { count: "exact", head: true });
+  q = applyFilter(q);
+  const { count, error } = await q;
+  return {
+    tableName,
+    count: count ?? null,
+    error: error?.message ?? "",
   };
 }

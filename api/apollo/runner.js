@@ -255,6 +255,7 @@ async function buildDepartmentReport(actor, runType, accessToken) {
     agents: departmentReview.agents,
     tableChecks: departmentReview.tableChecks,
     findings: departmentReview.findings,
+    perAgent: departmentReview.perAgent,
   };
 }
 
@@ -329,6 +330,7 @@ async function buildHeartbeatReport(actor, runType, accessToken) {
     agents: departmentReview.agents,
     tableChecks: departmentReview.tableChecks,
     findings,
+    perAgent: departmentReview.perAgent,
   };
 }
 
@@ -695,6 +697,45 @@ async function persistAuditRun(report, actor, accessToken) {
   if (findingsError) {
     console.error("Apollo finding write failed", findingsError.message);
     return { status: "partial", runId: run.id, message: "Run recorded, but findings could not be stored." };
+  }
+
+  // ── Per-agent run rows ──────────────────────────────────────────────────
+  // The umbrella "apollo" run above records the heartbeat as a whole. The
+  // per-agent sparklines (`fetchApolloSparklineData` in apolloAudit.js) query
+  // apollo_agent_runs filtered by agent_key — so without these rows, every
+  // department chip stays stuck on "no runs yet" forever. We write one row
+  // per agent that actually ran, using the perAgent map the department
+  // runner returns.
+  //
+  // Status is "completed" unless the agent itself threw (captured as
+  // status=failed in perAgent). A per-agent INSERT failure is noisy-but-
+  // non-fatal: the umbrella run + findings are already persisted, so we
+  // log and move on instead of returning an error state.
+  const perAgent = report.perAgent ?? {};
+  const perAgentRows = Object.entries(perAgent).map(([agentKey, info]) => {
+    const profile = report.agents?.find((a) => a.key === agentKey);
+    return {
+      agent_key: agentKey,
+      agent_name: profile?.name ?? agentKey,
+      run_type: actor.source === "runner_secret" ? "scheduled" : "manual",
+      status: info.status === "failed" ? "failed" : "completed",
+      scope: "read_only",
+      summary: info.status === "failed"
+        ? `Agent blocked: ${info.error ?? "unknown error"}`
+        : `${info.findingCount ?? 0} finding${info.findingCount === 1 ? "" : "s"} recorded.`,
+      started_at: timestamp,
+      completed_at: timestamp,
+      created_by: actor.id,
+    };
+  });
+  if (perAgentRows.length > 0) {
+    const { error: perAgentError } = await auditClient
+      .from("apollo_agent_runs")
+      .insert(perAgentRows);
+    if (perAgentError) {
+      console.error("Apollo per-agent run write failed", perAgentError.message);
+      // Non-fatal — umbrella run is already stored.
+    }
   }
 
   // Process actions attached to findings.
