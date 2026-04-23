@@ -60,6 +60,15 @@ const runStatusStyle = {
   queued:    "chip chip-neutral",
 };
 
+// Finding lifecycle chip — only rendered when status !== "open". Open is the
+// default for every newly-emitted finding, so suppressing the chip in that
+// case keeps rows clean and draws the eye only to findings that have moved.
+const findingStatusStyle = {
+  resolved: "chip chip-success",
+  accepted: "chip chip-neutral",
+  deferred: "chip chip-info",
+};
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const auditFmt = new Intl.DateTimeFormat(undefined, {
@@ -107,6 +116,9 @@ function FindingRow({ finding }) {
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {finding.approvalRequired && (
               <span className="chip chip-warning">approval</span>
+            )}
+            {finding.status && finding.status !== "open" && findingStatusStyle[finding.status] && (
+              <span className={findingStatusStyle[finding.status]}>{finding.status}</span>
             )}
             <span className={severityStyle[finding.severity] ?? severityStyle.info}>
               {finding.severity}

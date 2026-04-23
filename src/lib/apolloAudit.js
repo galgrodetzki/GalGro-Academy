@@ -23,7 +23,10 @@ function mapFinding(row) {
     detail: row.finding,
     recommendation: row.recommendation,
     approvalRequired: row.approval_required,
-    status: row.status,
+    // Lifecycle status: open / resolved / accepted / deferred. Agent-side
+    // actions (e.g. cyber.rls_audit auto-resolving when clean) already flip
+    // this, so the UI shows whether a finding still needs attention.
+    status: row.status ?? "open",
     createdAt: row.created_at,
   };
 }
