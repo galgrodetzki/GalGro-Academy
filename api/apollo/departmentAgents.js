@@ -89,6 +89,20 @@ async function safeFetch(supabase, tableName, columns) {
   };
 }
 
+// safeCount + .filter builder — lets us count rows matching a predicate
+// without fetching them. Used for the mentor_messages unread total.
+async function safeCountWithFilter(supabase, tableName, applyFilter) {
+  if (!supabase) return { tableName, count: null, error: "No read client is configured." };
+  let q = supabase.from(tableName).select("*", { count: "exact", head: true });
+  q = applyFilter(q);
+  const { count, error } = await q;
+  return {
+    tableName,
+    count: count ?? null,
+    error: error?.message ?? "",
+  };
+}
+
 function runSecurityAgent(config, portalData) {
   const agent = DEPARTMENT_AGENT_PROFILES[0];
   const today = new Date().toISOString().slice(0, 10);
@@ -1032,19 +1046,5 @@ export async function runDepartmentAgents({ supabase, config }) {
     tableChecks,
     findings,
     perAgent,
-  };
-}
-
-// safeCount + .filter builder — lets us count rows matching a predicate
-// without fetching them. Used for the mentor_messages unread total.
-async function safeCountWithFilter(supabase, tableName, applyFilter) {
-  if (!supabase) return { tableName, count: null, error: "No read client is configured." };
-  let q = supabase.from(tableName).select("*", { count: "exact", head: true });
-  q = applyFilter(q);
-  const { count, error } = await q;
-  return {
-    tableName,
-    count: count ?? null,
-    error: error?.message ?? "",
   };
 }

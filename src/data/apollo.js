@@ -83,6 +83,9 @@ export const APOLLO_APPROVAL_TIERS = [
   },
 ];
 
+// Ordered chronologically. Each entry is a real shipped phase — don't add
+// one until it's committed to main. Keep `detail` tight (≈ one sentence) so
+// the Build Sequence panel stays readable.
 export const APOLLO_FOUNDATION_STEPS = [
   {
     step: "13A",
@@ -100,7 +103,7 @@ export const APOLLO_FOUNDATION_STEPS = [
     step: "13C",
     title: "Department Agents",
     status: "Active",
-    detail: "Security, Cyber, QA, and Drill Scout run live data-driven checks on every heartbeat.",
+    detail: "All six agents (Security, Cyber, QA, Drill Scout, Perf, Product) run live checks every heartbeat.",
   },
   {
     step: "13D",
@@ -112,12 +115,48 @@ export const APOLLO_FOUNDATION_STEPS = [
     step: "13E",
     title: "Model Access",
     status: "Complete",
-    detail: "gpt-5-mini active via @ai-sdk/openai. OPENAI_API_KEY configured server-side only.",
+    detail: "Server-side model path armed via AI Gateway. No credentials in the browser bundle.",
   },
   {
     step: "13F",
     title: "Background Heartbeat",
     status: "Complete",
     detail: "Daily cron at 09:00 UTC. All gates armed: APOLLO_HEARTBEAT_ENABLED, CRON_SECRET, SUPABASE_SERVICE_ROLE_KEY.",
+  },
+  {
+    step: "13G–H",
+    title: "Action System",
+    status: "Complete",
+    detail: "Action registry with observe/recommend/approval tiers. Security, QA, and Drill Scout queue real actions.",
+  },
+  {
+    step: "13J",
+    title: "Approval Lifecycle",
+    status: "Complete",
+    detail: "Retry for failed executions, execution_result surfacing, and undo for access.revoke.",
+  },
+  {
+    step: "13K",
+    title: "Cyber Action",
+    status: "Complete",
+    detail: "cyber.rls_audit probes key tables with an anon client every heartbeat.",
+  },
+  {
+    step: "13L",
+    title: "Chat ↔ Action Bridge",
+    status: "Complete",
+    detail: "Apollo suggests actions inline; head coach still clicks once to queue, once to approve.",
+  },
+  {
+    step: "13M",
+    title: "Observability & Budget",
+    status: "Complete",
+    detail: "Daily token counter + optional budget, last-cron chip, weekly digest memory entries.",
+  },
+  {
+    step: "13N",
+    title: "Full Roster Online",
+    status: "Active",
+    detail: "Perf Lead + Product Lead shipping findings. Status chips derived from sparkline data, not labels.",
   },
 ];
