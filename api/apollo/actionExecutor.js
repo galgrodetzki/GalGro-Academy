@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { SUPABASE_ANON_KEY, makeSupabaseClient } from "../_shared/auth.js";
 
 // Apollo 13G — Action Executor
 //
@@ -28,16 +28,6 @@ import { createClient } from "@supabase/supabase-js";
 // handler returns { ok: boolean, result?: object, error?: string }.
 // Handlers MUST be idempotent where possible and MUST NOT throw — catch
 // internally and return { ok: false, error }.
-
-// 13K: anon client config for cyber.rls_audit. Same fallback chain as the rest
-// of the Apollo server code so a missing env doesn't hard-crash the runner.
-const SUPABASE_URL = process.env.SUPABASE_URL
-  ?? process.env.VITE_SUPABASE_URL
-  ?? "https://gajcrvxyenxjqewuvkgw.supabase.co";
-
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
-  ?? process.env.VITE_SUPABASE_ANON_KEY
-  ?? "sb_publishable_-Sp_uIuA8o1I7nvp-aMxdQ_Y_OLNc1Y";
 
 const FORBIDDEN_CATEGORIES = new Set([
   "secret_exposure",
@@ -247,9 +237,7 @@ registerAction({
 
     // Fresh anon client: no auth header, no session. Simulates an attacker
     // hitting the API with only the publishable key.
-    const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const anonClient = makeSupabaseClient(SUPABASE_ANON_KEY);
 
     const probes = [];
     for (const table of targets) {

@@ -20,18 +20,15 @@
 //     constraint on (keeper_profile_id, trigger_date, trigger_type, template_id)
 //     makes re-runs no-ops.
 
-import { createClient } from "@supabase/supabase-js";
 import { isPushConfigured, sendPush } from "./_push.js";
+import {
+  SUPABASE_ANON_KEY,
+  SERVICE_ROLE_KEY,
+  makeSupabaseClient,
+  getBearerToken,
+  constantTimeEqual,
+} from "../_shared/auth.js";
 
-const SUPABASE_URL = process.env.SUPABASE_URL
-  ?? process.env.VITE_SUPABASE_URL
-  ?? "https://gajcrvxyenxjqewuvkgw.supabase.co";
-
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
-  ?? process.env.VITE_SUPABASE_ANON_KEY
-  ?? "sb_publishable_-Sp_uIuA8o1I7nvp-aMxdQ_Y_OLNc1Y";
-
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RUNNER_SECRET = process.env.MENTOR_RUNNER_SECRET
   ?? process.env.APOLLO_RUNNER_SECRET
   ?? process.env.CRON_SECRET;
@@ -45,34 +42,6 @@ const JSON_HEADERS = {
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS });
-}
-
-function makeSupabaseClient(key, accessToken) {
-  const options = {
-    auth: { persistSession: false, autoRefreshToken: false },
-  };
-  if (accessToken) {
-    options.global = { headers: { Authorization: `Bearer ${accessToken}` } };
-  }
-  return createClient(SUPABASE_URL, key, options);
-}
-
-function constantTimeEqual(a, b) {
-  const encoder = new TextEncoder();
-  const left = encoder.encode(a);
-  const right = encoder.encode(b);
-  let diff = left.length ^ right.length;
-  const length = Math.max(left.length, right.length);
-  for (let i = 0; i < length; i += 1) {
-    diff |= (left[i] ?? 0) ^ (right[i] ?? 0);
-  }
-  return diff === 0;
-}
-
-function getBearerToken(request) {
-  const header = request.headers.get("authorization") ?? "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match?.[1] ?? "";
 }
 
 function getRunnerSecret(request) {

@@ -1,17 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
 import { generateObject, generateText, jsonSchema } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { buildApolloContextPacks } from "./contextPacks.js";
 import { getBudgetStatus, recordTokenUsage } from "./_tokens.js";
 import { listActions } from "./actionExecutor.js";
-
-const SUPABASE_URL = process.env.SUPABASE_URL
-  ?? process.env.VITE_SUPABASE_URL
-  ?? "https://gajcrvxyenxjqewuvkgw.supabase.co";
-
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY
-  ?? process.env.VITE_SUPABASE_ANON_KEY
-  ?? "sb_publishable_-Sp_uIuA8o1I7nvp-aMxdQ_Y_OLNc1Y";
+import { authorizeHeadCoach as sharedAuthorizeHeadCoach } from "../_shared/auth.js";
 
 // Strip provider prefix if present (e.g. "openai/gpt-5-mini" -> "gpt-5-mini")
 const APOLLO_MODEL = (process.env.APOLLO_MODEL ?? "gpt-5-mini").replace(/^openai\//, "");
@@ -31,33 +23,12 @@ function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS });
 }
 
-function makeSupabaseClient(accessToken) {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-    global: accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined,
-  });
-}
-
-function getBearerToken(request) {
-  const header = request.headers.get("authorization") ?? "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match?.[1] ?? "";
-}
-
 async function readPayload(request) {
   try {
     return await request.json();
   } catch {
     return {};
   }
-}
-
-function accessExpired(profile) {
-  if (!profile?.access_expires_on) return false;
-  return profile.access_expires_on < new Date().toISOString().slice(0, 10);
 }
 
 function cleanMessage(value) {
@@ -68,43 +39,8 @@ function truncate(value = "", maxLength = 180) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
 }
 
-async function authorizeHeadCoach(request) {
-  const accessToken = getBearerToken(request);
-  if (!accessToken) {
-    return { ok: false, status: 401, error: "Missing head-coach session." };
-  }
-
-  const supabase = makeSupabaseClient(accessToken);
-  const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
-  if (userError || !userData.user) {
-    return { ok: false, status: 401, error: "Invalid or expired session." };
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("id,name,role,access_expires_on")
-    .eq("id", userData.user.id)
-    .single();
-
-  if (profileError || !profile) {
-    return { ok: false, status: 403, error: "Could not verify portal role." };
-  }
-
-  if (profile.role !== "head_coach" || accessExpired(profile)) {
-    return { ok: false, status: 403, error: "Apollo chat is head-coach only." };
-  }
-
-  return {
-    ok: true,
-    accessToken,
-    supabase,
-    actor: {
-      id: userData.user.id,
-      name: profile.name ?? "Head Coach",
-      role: profile.role,
-      source: "supabase_session",
-    },
-  };
+function authorizeHeadCoach(request) {
+  return sharedAuthorizeHeadCoach(request, { roleLabel: "Apollo chat" });
 }
 
 function latestFindings(context, predicate = () => true, limit = 5) {
