@@ -75,7 +75,7 @@ export default function KeeperOnboardingModal({ profile, onDone }) {
               onChange={(e) => setPreferredName(e.target.value)}
               placeholder={defaultPreferred || "e.g. Mo"}
               maxLength={30}
-              className="w-full bg-bg-tertiary border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
+              className="w-full bg-bg-soft border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
             />
           </Field>
 
@@ -84,7 +84,7 @@ export default function KeeperOnboardingModal({ profile, onDone }) {
               type="date"
               value={birthday}
               onChange={(e) => setBirthday(e.target.value)}
-              className="w-full bg-bg-tertiary border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
+              className="w-full bg-bg-soft border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
             />
             <p className="text-[11px] text-white/40 mt-1">
               So Mentor can drop a note on your birthday. Year is optional — use any.
@@ -98,7 +98,7 @@ export default function KeeperOnboardingModal({ profile, onDone }) {
               onChange={(e) => setCurrentFocus(e.target.value)}
               placeholder="e.g. reading crosses, footwork under pressure"
               maxLength={100}
-              className="w-full bg-bg-tertiary border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
+              className="w-full bg-bg-soft border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
             />
           </Field>
 
@@ -109,7 +109,7 @@ export default function KeeperOnboardingModal({ profile, onDone }) {
               onChange={(e) => setIdol(e.target.value)}
               placeholder="e.g. Courtois, Neuer, Alisson"
               maxLength={60}
-              className="w-full bg-bg-tertiary border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
+              className="w-full bg-bg-soft border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent"
             />
           </Field>
 
@@ -120,7 +120,7 @@ export default function KeeperOnboardingModal({ profile, onDone }) {
               placeholder="e.g. #1 since U-12, fearless on crosses, love a good save video"
               maxLength={200}
               rows={2}
-              className="w-full bg-bg-tertiary border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent resize-none"
+              className="w-full bg-bg-soft border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent resize-none"
             />
           </Field>
         </div>
