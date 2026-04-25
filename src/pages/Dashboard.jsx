@@ -17,12 +17,10 @@ import {
   Swords,
   Target,
   TrendingUp,
-  UserCheck,
   Users,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import MentorFeed from "../components/MentorFeed";
-import MentorPushToggle from "../components/MentorPushToggle";
 import KeeperOnboardingModal from "../components/KeeperOnboardingModal";
 import { needsKeeperOnboarding } from "../lib/keeperProfile";
 import TacticalField from "../components/ui/TacticalField";
@@ -392,20 +390,6 @@ export default function Dashboard({ setPage }) {
           </>
         )}
       </Motion.div>
-
-      {/* Mentor-E1: keeper-authored "About you" card. Visible only once
-          onboarding is complete (skipping still writes preferred_name).
-          Edit re-opens the same onboarding modal. */}
-      {isKeeper && !showKeeperOnboarding && (
-        <AboutYouCard
-          profile={profile}
-          onEdit={() => user && fetchProfile(user.id)}
-        />
-      )}
-
-      {/* Mentor-D: Push opt-in. Renders as a no-op when push isn't
-          configured server-side or unsupported in the browser. */}
-      {isKeeper && <MentorPushToggle className="mb-4" />}
 
       {/* Mentor-C3: keeper-facing Mentor messages. RLS keeps this
           self-scoped — keepers see their own feed, the coach sees
@@ -913,72 +897,6 @@ function KeeperSignal({ icon: Icon, label, title, detail, accent }) {
       <div className="truncate text-sm font-bold">{title}</div>
       <div className="mt-1 text-xs text-white/45">{detail}</div>
     </div>
-  );
-}
-
-// Mentor-E1 — "About you" card. Displays the keeper-authored enrichment data
-// (preferred name, birthday, current focus, keeper idol, bio) and offers an
-// Edit affordance that re-opens the onboarding modal. Hidden when there's
-// nothing enrichment-worthy to show beyond preferred_name.
-function AboutYouCard({ profile, onEdit }) {
-  const [editing, setEditing] = useState(false);
-
-  const preferred = profile?.preferred_name?.trim();
-  const currentFocus = profile?.current_focus?.trim();
-  const idol = profile?.idol?.trim();
-  const bio = profile?.bio?.trim();
-  const birthday = profile?.birthday;
-
-  // Nothing beyond the default preferred_name → don't clutter the dashboard.
-  // Keeper can add details later via the (upcoming) settings flow.
-  const hasExtras = Boolean(birthday || currentFocus || idol || bio);
-  if (!hasExtras) return null;
-
-  const birthdayLabel = birthday
-    ? new Date(`${birthday}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-    : null;
-
-  return (
-    <>
-      <div className="card p-4 border border-bg-border mb-4">
-        <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-lg bg-electric/10 flex items-center justify-center flex-shrink-0">
-            <UserCheck size={16} className="text-electric" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-              <div className="text-sm font-bold">
-                About {preferred || "you"}
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="text-[11px] font-bold text-white/50 hover:text-white"
-              >
-                Edit
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/70">
-              {birthdayLabel && <span><span className="text-white/40">Birthday:</span> {birthdayLabel}</span>}
-              {idol && <span><span className="text-white/40">Idol:</span> {idol}</span>}
-              {currentFocus && <span><span className="text-white/40">Focus:</span> {currentFocus}</span>}
-            </div>
-            {bio && (
-              <p className="text-xs text-white/60 leading-relaxed mt-1.5">{bio}</p>
-            )}
-          </div>
-        </div>
-      </div>
-      {editing && (
-        <KeeperOnboardingModal
-          profile={profile}
-          onDone={async () => {
-            setEditing(false);
-            await onEdit?.();
-          }}
-        />
-      )}
-    </>
   );
 }
 

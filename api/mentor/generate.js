@@ -21,6 +21,7 @@
 //     makes re-runs no-ops.
 
 import { isPushConfigured, sendPush } from "./_push.js";
+import { isEmailConfigured, sendMentorEmail } from "./_email.js";
 import {
   SUPABASE_ANON_KEY,
   SERVICE_ROLE_KEY,
@@ -239,20 +240,28 @@ async function insertMessage(client, payload) {
 // Fan-out a push to every subscription the keeper has registered.
 // Non-fatal: any subscription error is logged into push_subscriptions but
 // doesn't break the generator run.
+//
+// Returns { hadSubscription, anyDelivered } so the caller can decide whether
+// to fall back to email per dedup rule (c): email when !hadSubscription OR
+// (hadSubscription && !anyDelivered).
 async function pushToKeeper({ client, keeperProfileId, payload, pushStats }) {
-  if (!isPushConfigured()) return;
+  if (!isPushConfigured()) {
+    return { hadSubscription: false, anyDelivered: false };
+  }
   const { data: subs, error } = await client
     .from("push_subscriptions")
     .select("id,endpoint,p256dh,auth")
     .eq("profile_id", keeperProfileId);
   if (error || !Array.isArray(subs) || subs.length === 0) {
     pushStats.noSubscription += 1;
-    return;
+    return { hadSubscription: false, anyDelivered: false };
   }
+  let anyDelivered = false;
   for (const sub of subs) {
     const result = await sendPush(sub, payload);
     if (result.ok) {
       pushStats.delivered += 1;
+      anyDelivered = true;
       await client
         .from("push_subscriptions")
         .update({ last_success_at: new Date().toISOString(), last_error: null })
@@ -271,17 +280,40 @@ async function pushToKeeper({ client, keeperProfileId, payload, pushStats }) {
         .eq("id", sub.id);
     }
   }
+  return { hadSubscription: true, anyDelivered };
 }
 
-async function generateForWindow({ client, templatesByTrigger, keepers, players, today, tomorrow }) {
+// E3: fetch every keeper's email via Supabase Auth admin API (service-role
+// only). Emails aren't mirrored onto profiles — auth.users is the source of
+// truth. Paginated client-side because auth.admin.listUsers caps at 1000/page.
+async function loadKeeperEmails(client) {
+  const emails = new Map();
+  let page = 1;
+  while (page < 20) {
+    const { data, error } = await client.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw new Error(`Could not load auth users: ${error.message}`);
+    const users = data?.users ?? [];
+    if (users.length === 0) break;
+    for (const u of users) {
+      if (u?.id && u?.email) emails.set(u.id, u.email);
+    }
+    if (users.length < 1000) break;
+    page += 1;
+  }
+  return emails;
+}
+
+async function generateForWindow({ client, templatesByTrigger, keepers, keeperEmails, players, today, tomorrow }) {
   const created = [];
   const skipped = [];
   const errors = [];
   const pushStats = { delivered: 0, failed: 0, pruned: 0, noSubscription: 0 };
+  const emailStats = { sent: 0, failed: 0, skipped: 0, noAddress: 0 };
 
-  // Fire a push for a freshly-created mentor_message. Non-blocking on any
-  // single failure — one dead subscription mustn't stop the rest.
-  const pushForMessage = async ({ keeper, triggerType, tpl, title, body }) => {
+  // Fire a push (and, per dedup rule c, email fallback) for a freshly-created
+  // mentor_message. Non-blocking on any failure — one dead channel mustn't
+  // stop the rest of the run.
+  const dispatchForMessage = async ({ keeper, triggerType, tpl, title, body }) => {
     const pushPayload = {
       title,
       body: body.length > 240 ? `${body.slice(0, 237)}…` : body,
@@ -289,18 +321,53 @@ async function generateForWindow({ client, templatesByTrigger, keepers, players,
       tag: `mentor-${keeper.id}-${triggerType}`,
       triggerType,
     };
+
+    let pushOutcome = { hadSubscription: false, anyDelivered: false };
     try {
-      await pushToKeeper({
+      pushOutcome = await pushToKeeper({
         client,
         keeperProfileId: keeper.id,
         payload: pushPayload,
         pushStats,
       });
     } catch (err) {
-      // Swallow — already logged per-subscription inside pushToKeeper.
       console.warn("Mentor push fanout failed", { keeper: keeper.id, template: tpl?.id, err: err?.message });
     }
+
+    // Dedup rule (c): email only when push can't reach the keeper. Armed +
+    // at-least-one-delivered → skip email (keeper already got it).
+    const needsEmail = !pushOutcome.hadSubscription || !pushOutcome.anyDelivered;
+    if (!needsEmail) {
+      emailStats.skipped += 1;
+      return;
+    }
+    if (!isEmailConfigured()) {
+      // Email path is our fallback for E3. If it's not configured yet, stay
+      // silent — the mentor_message row is still written and visible in-app.
+      emailStats.skipped += 1;
+      return;
+    }
+    const to = keeperEmails.get(keeper.id);
+    if (!to) {
+      emailStats.noAddress += 1;
+      return;
+    }
+    try {
+      const res = await sendMentorEmail({
+        to,
+        subject: title,
+        title,
+        body,
+        url: "/",
+      });
+      if (res.ok) emailStats.sent += 1;
+      else emailStats.failed += 1;
+    } catch (err) {
+      emailStats.failed += 1;
+      console.warn("Mentor email failed", { keeper: keeper.id, err: err?.message });
+    }
   };
+  const pushForMessage = dispatchForMessage;
 
   const keeperById = new Map(keepers.map((k) => [k.id, k]));
   // Player → profile lookups so session.player_ids (player ids) resolve to a
@@ -467,7 +534,7 @@ async function generateForWindow({ client, templatesByTrigger, keepers, players,
     }
   }
 
-  return { created, skipped, errors, pushStats };
+  return { created, skipped, errors, pushStats, emailStats };
 }
 
 async function runHandler(request) {
@@ -504,11 +571,27 @@ async function runHandler(request) {
       loadKeeperProfiles(auth.readClient),
       loadPlayers(auth.readClient),
     ]);
+    // E3: keeper emails live on auth.users, not profiles. admin.listUsers
+    // requires service-role; when called from a head-coach session we don't
+    // have one, so email fallback silently skips (in-app MentorFeed still
+    // shows the message).
+    let keeperEmails = new Map();
+    try {
+      if (SERVICE_ROLE_KEY) {
+        const serviceClient = auth.writeClient?.auth?.admin
+          ? auth.writeClient
+          : makeSupabaseClient(SERVICE_ROLE_KEY);
+        keeperEmails = await loadKeeperEmails(serviceClient);
+      }
+    } catch (err) {
+      console.warn("Mentor email lookup failed; skipping email fallback", err?.message);
+    }
 
     const result = await generateForWindow({
       client: auth.writeClient,
       templatesByTrigger,
       keepers,
+      keeperEmails,
       players,
       today: todayKey,
       tomorrow: tomorrowKey,
@@ -525,8 +608,10 @@ async function runHandler(request) {
       skipped: result.skipped,
       errors: result.errors,
       pushStats: result.pushStats,
+      emailStats: result.emailStats,
       pushConfigured: isPushConfigured(),
-      summary: `${result.created.length} created, ${result.skipped.length} duplicates, ${result.errors.length} errors; push ${result.pushStats.delivered} delivered, ${result.pushStats.failed} failed, ${result.pushStats.pruned} pruned`,
+      emailConfigured: isEmailConfigured(),
+      summary: `${result.created.length} created, ${result.skipped.length} duplicates, ${result.errors.length} errors; push ${result.pushStats.delivered} delivered, ${result.pushStats.failed} failed, ${result.pushStats.pruned} pruned; email ${result.emailStats.sent} sent, ${result.emailStats.failed} failed`,
     });
   } catch (err) {
     return json({ error: err?.message || "Mentor generator failed." }, 500);
